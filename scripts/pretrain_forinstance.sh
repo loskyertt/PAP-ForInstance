@@ -3,7 +3,7 @@ GPU_ID=0
 DATASET='forinstance'
 SPLIT=0
 DATA_PATH='./datasets/FORInstance/blocks_dev_bs10.0_s5.0'
-SAVE_PATH='./log_forinstance/'
+SAVE_PATH='./logs/log_forinstance/'
 
 NUM_POINTS=2048
 PC_ATTRIBS='xyzIXYZ'

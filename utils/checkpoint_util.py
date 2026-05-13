@@ -11,7 +11,10 @@ def load_pretrain_checkpoint(model, pretrain_checkpoint_path):
     model_dict = model.state_dict()
     if pretrain_checkpoint_path is not None:
         print('Load encoder module from pretrained checkpoint...')
-        pretrained_dict = torch.load(os.path.join(pretrain_checkpoint_path, 'checkpoint.tar'))['params']
+        pretrained_dict = torch.load(
+            os.path.join(pretrain_checkpoint_path, 'checkpoint.tar'),
+            weights_only=False,
+        )['params']
         pretrained_dict = {'encoder.' + k: v for k, v in pretrained_dict.items()}
         pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict}
         model_dict.update(pretrained_dict)
@@ -24,7 +27,10 @@ def load_pretrain_checkpoint(model, pretrain_checkpoint_path):
 
 def load_model_checkpoint(model, model_checkpoint_path, optimizer=None, mode='test'):
     try:
-        checkpoint = torch.load(os.path.join(model_checkpoint_path, 'checkpoint.tar'))
+        checkpoint = torch.load(
+            os.path.join(model_checkpoint_path, 'checkpoint.tar'),
+            weights_only=False,
+        )
         start_iter = checkpoint['iteration']
         start_iou = checkpoint['IoU']
     except:

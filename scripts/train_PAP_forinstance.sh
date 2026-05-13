@@ -3,7 +3,7 @@ GPU_ID=0
 DATASET='forinstance'
 SPLIT=0
 DATA_PATH='./datasets/FORInstance/blocks_dev_bs10.0_s5.0'
-SAVE_PATH='./log_forinstance_PAP/'
+SAVE_PATH='./logs/log_forinstance_PAP/'
 
 NUM_POINTS=2048
 PC_ATTRIBS='xyzIXYZ'
@@ -12,7 +12,7 @@ MLP_WIDTHS='[512, 256]'
 K=20
 BASE_WIDTHS='[128, 64]'
 
-PRETRAIN_CHECKPOINT='./log_forinstance/log_pretrain_forinstance_S0'
+PRETRAIN_CHECKPOINT='./logs/log_forinstance/log_pretrain_forinstance_S0'
 N_WAY=2
 K_SHOT=1
 N_QUESIES=1

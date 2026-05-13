@@ -3,7 +3,7 @@ GPU_ID=1
 DATASET='s3dis'
 SPLIT=0
 DATA_PATH='./datasets/S3DIS/blocks_bs1_s1'
-SAVE_PATH='./log_s3dis_PAP/'
+SAVE_PATH='./logs/log_s3dis_PAP/'
 
 NUM_POINTS=2048
 PC_ATTRIBS='xyzrgbXYZ'
@@ -12,7 +12,7 @@ MLP_WIDTHS='[512, 256]'
 K=20
 BASE_WIDTHS='[128, 64]'
 
-PRETRAIN_CHECKPOINT='./log_s3dis/log_pretrain_s3dis_S0'
+PRETRAIN_CHECKPOINT='./logs/log_s3dis/log_pretrain_s3dis_S0'
 N_WAY=2
 K_SHOT=1
 N_QUESIES=1

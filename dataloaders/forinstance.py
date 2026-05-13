@@ -10,6 +10,9 @@ forinstance2blocks.py):
         col 3   : intensity      (min-max normalized to [0, 1])
         col 4   : label          (0-4, stored as float32; cast to int64 on load)
 
+This loader also accepts the earlier 8-column FOR-Instance blocks already
+present in some workspaces, where the semantic label is stored in col 7.
+
 Label mapping (remapped from raw 'classification' field):
     0 → terrain
     1 → low_vegetation
@@ -36,8 +39,9 @@ import numpy as np
 class FORInstanceDataset(object):
     # Column index of the label field in the preprocessed .npy blocks.
     # S3DIS / ScanNet use col 6 ([x,y,z,r,g,b,label]).
-    # FOR-Instance uses col 4 ([x,y,z,intensity,label]).
-    LABEL_COL = 4
+    # FOR-Instance can use col 4 in the current 5-column preprocessing output,
+    # or col 7 in earlier 8-column blocks.
+    LABEL_COL = None
     CLASS_NAMES = ["terrain", "low_vegetation", "stem", "live_branches", "woody_branches"]
 
     def __init__(self, cvfold: int, data_path: str):
@@ -49,7 +53,8 @@ class FORInstanceDataset(object):
         """
         self.data_path = data_path
         self.classes = 5  # number of valid semantic classes
-        self.label_col = self.LABEL_COL  # exposed so loader.py can read it
+        self.label_col = self._detect_label_col()
+        print(f"[FORInstanceDataset] label_col={self.label_col}")
 
         # ------------------------------------------------------------------ #
         # Class name ↔ integer mapping (read from classnames.txt)
@@ -114,7 +119,9 @@ class FORInstanceDataset(object):
         and thresholds to avoid reusing stale mappings after preprocessing
         changes.
         """
-        cache_file = os.path.join(self.data_path, "class2scans_label4_min5pct_100pts.pkl")
+        cache_file = os.path.join(
+            self.data_path, f"class2scans_label{self.label_col}_min5pct_100pts.pkl"
+        )
 
         if os.path.exists(cache_file):
             with open(cache_file, "rb") as f:
@@ -143,10 +150,10 @@ class FORInstanceDataset(object):
 
         for fpath in block_files:
             scan_name = os.path.basename(fpath)[:-4]  # strip .npy
-            data = np.load(fpath)  # [N, 5]
+            data = np.load(fpath)
 
             # label is stored as float32; cast to int for comparison
-            labels = data[:, self.LABEL_COL].astype(np.int64)
+            labels = data[:, self.label_col].astype(np.int64)
             classes = np.unique(labels)
 
             print(f"  {scan_name} | shape: {data.shape} | classes: {list(classes)}")
@@ -169,3 +176,38 @@ class FORInstanceDataset(object):
         print(f"  → cached to {cache_file}")
 
         return class2scans
+
+    def _detect_label_col(self) -> int:
+        """Detect the semantic-label column for FOR-Instance block files.
+
+        The current preprocessing pipeline writes [x,y,z,intensity,label].
+        Some existing generated data in this project has 8 columns and stores
+        semantic labels in the last column. Prefer the 8-column layout when it
+        is present so old generated blocks remain usable.
+        """
+        block_files = sorted(glob.glob(os.path.join(self.data_path, "data", "*.npy")))
+        if not block_files:
+            return 4
+
+        sample = np.load(block_files[0], mmap_mode="r")
+        if sample.ndim != 2:
+            raise ValueError(
+                f"FOR-Instance block must be a 2-D array, got shape {sample.shape} "
+                f"for {block_files[0]}"
+            )
+
+        if sample.shape[1] >= 8:
+            labels = sample[:, 7].astype(np.int64)
+            if np.all((labels >= 0) & (labels < self.classes)):
+                return 7
+
+        if sample.shape[1] >= 5:
+            labels = sample[:, 4].astype(np.int64)
+            if np.all((labels >= 0) & (labels < self.classes)):
+                return 4
+
+        raise ValueError(
+            "Could not detect FOR-Instance label column. Expected either "
+            "[x,y,z,intensity,label] or an 8-column block with labels in col 7; "
+            f"got shape {sample.shape} for {block_files[0]}"
+        )

@@ -11,8 +11,8 @@ MLP_WIDTHS='[512, 256]'
 K=20
 BASE_WIDTHS='[128, 64]'
 
-MODEL_CHECKPOINT='./log_forinstance_PAP/log_proto_forinstance_S0_N2_K1_Att1'
-PRETRAIN_CHECKPOINT='./log_forinstance/log_pretrain_forinstance_S0'
+MODEL_CHECKPOINT='./logs/log_forinstance_PAP/log_proto_forinstance_S0_N2_K1_Att1'
+PRETRAIN_CHECKPOINT='./logs/log_forinstance/log_pretrain_forinstance_S0'
 N_WAY=2
 K_SHOT=1
 N_QUESIES=1

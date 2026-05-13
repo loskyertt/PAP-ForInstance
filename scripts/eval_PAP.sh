@@ -12,7 +12,7 @@ MLP_WIDTHS='[512, 256]'
 K=20
 BASE_WIDTHS='[128, 64]'
 
-MODEL_CHECKPOINT='./log_s3dis_PAP/log_proto_s3dis_S0_N2_K1_Att1'
+MODEL_CHECKPOINT='./logs/log_s3dis_PAP/log_proto_s3dis_S0_N2_K1_Att1'
 N_WAY=2
 K_SHOT=1
 N_QUESIES=1

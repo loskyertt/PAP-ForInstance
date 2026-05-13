@@ -481,17 +481,22 @@ class MyTestDataset(Dataset):
         )
         self.classes = dataset.classes
 
+        attrib_tag = (
+            "%s_label%d_" % (pc_attribs, dataset.label_col)
+            if dataset_name == "forinstance"
+            else ""
+        )
         if mode == "valid":
             test_data_path = os.path.join(
                 data_path,
-                "S_%d_N_%d_K_%d_episodes_%d_pts_%d"
-                % (cvfold, n_way, k_shot, num_episode_per_comb, num_point),
+                "S_%d_N_%d_K_%d_%sepisodes_%d_pts_%d"
+                % (cvfold, n_way, k_shot, attrib_tag, num_episode_per_comb, num_point),
             )
         elif mode == "test":
             test_data_path = os.path.join(
                 data_path,
-                "S_%d_N_%d_K_%d_test_episodes_%d_pts_%d"
-                % (cvfold, n_way, k_shot, num_episode_per_comb, num_point),
+                "S_%d_N_%d_K_%d_%stest_episodes_%d_pts_%d"
+                % (cvfold, n_way, k_shot, attrib_tag, num_episode_per_comb, num_point),
             )
         else:
             raise NotImplementedError("Mode (%s) is unknown!" % mode)

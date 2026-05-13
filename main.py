@@ -21,7 +21,7 @@ if __name__ == '__main__':
                         help='Path to the checkpoint of pre model for resuming')
     parser.add_argument('--model_checkpoint_path', type=str, default=None,
                         help='Path to the checkpoint of model for resuming')
-    parser.add_argument('--save_path', type=str, default='./log_s3dis/',
+    parser.add_argument('--save_path', type=str, default='./logs/log_s3dis/',
                         help='Directory to the save log and checkpoints')
     parser.add_argument('--eval_interval', type=int, default=1500,
                         help='iteration/epoch inverval to evaluate model')
