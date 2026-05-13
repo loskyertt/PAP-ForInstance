@@ -105,6 +105,14 @@ def pretrain(args):
     elif args.dataset == 'scannet':
         from dataloaders.scannet import ScanNetDataset
         DATASET = ScanNetDataset(args.cvfold, args.data_path)
+    elif args.dataset == 'forinstance':
+        from dataloaders.forinstance import FORInstanceDataset
+        if 'rgb' in args.pc_attribs:
+            raise ValueError(
+                "FOR-Instance preprocessing stores [x,y,z,intensity,label], not RGB. "
+                "Use --pc_attribs xyzIXYZ for pretraining."
+            )
+        DATASET = FORInstanceDataset(args.cvfold, args.data_path)
     else:
         raise NotImplementedError('Unknown dataset %s!' % args.dataset)
 
@@ -114,11 +122,13 @@ def pretrain(args):
 
     TRAIN_DATASET = MyPretrainDataset(args.data_path, CLASSES, CLASS2SCANS, mode='train',
                                       num_point=args.pc_npts, pc_attribs=args.pc_attribs,
-                                      pc_augm=args.pc_augm, pc_augm_config=PC_AUGMENT_CONFIG)
+                                      pc_augm=args.pc_augm, pc_augm_config=PC_AUGMENT_CONFIG,
+                                      label_col=DATASET.label_col)
 
     VALID_DATASET = MyPretrainDataset(args.data_path, CLASSES, CLASS2SCANS, mode='test',
                                       num_point=args.pc_npts, pc_attribs=args.pc_attribs,
-                                      pc_augm=args.pc_augm, pc_augm_config=PC_AUGMENT_CONFIG)
+                                      pc_augm=args.pc_augm, pc_augm_config=PC_AUGMENT_CONFIG,
+                                      label_col=DATASET.label_col)
 
     logger.cprint('=== Pre-train Dataset (classes: {0}) | Train: {1} blocks | Valid: {2} blocks ==='.format(
                                                      CLASSES, len(TRAIN_DATASET), len(VALID_DATASET)))

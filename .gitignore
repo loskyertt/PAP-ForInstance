@@ -71,3 +71,12 @@ vis4d-workspace
 vis4d.egg-info
 logs/
 *.tmp
+
+# my ignore
+data
+datasets/FORInstance/blocks*/
+datasets/FORInstance/scenes*/
+datasets/*/blocks*/S_*_episodes_*/
+datasets/*/blocks*/S_*_test_episodes_*/
+.obsidian
+paper

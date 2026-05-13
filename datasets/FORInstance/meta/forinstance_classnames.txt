@@ -1,0 +1,5 @@
+terrain
+low_vegetation
+stem
+live_branches
+woody_branches

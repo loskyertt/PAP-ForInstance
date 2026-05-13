@@ -12,7 +12,6 @@ from torch.utils.data import DataLoader
 from dataloaders.loader import MyTestDataset, batch_test_task_collate
 from models.proto_learner import ProtoLearner
 from models.proto_learner_FZ import ProtoLearnerFZ
-from models.mpti_learner import MPTILearner
 from utils.cuda_util import cast_cuda
 from utils.logger import init_logger
 
@@ -112,7 +111,11 @@ def eval(args):
         else:
             learner = ProtoLearner(args, mode='test')
     elif args.phase == 'mptieval':
+        from models.mpti_learner import MPTILearner
+
         learner = MPTILearner(args, mode='test')
+    else:
+        raise NotImplementedError('Unknown eval phase %s!' % args.phase)
 
     # Init dataset, dataloader
     TEST_DATASET = MyTestDataset(args.data_path, args.dataset, cvfold=args.cvfold,

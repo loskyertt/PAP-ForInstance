@@ -12,7 +12,7 @@ if __name__ == '__main__':
     parser.add_argument('--phase', type=str, default='graphtrain', choices=['pretrain', 'finetune',
                                                                             'prototrain', 'protoeval',
                                                                             'mptitrain', 'mptieval'])
-    parser.add_argument('--dataset', type=str, default='s3dis', help='Dataset name: s3dis|scannet')
+    parser.add_argument('--dataset', type=str, default='s3dis', help='Dataset name: s3dis|scannet|forinstance')
     parser.add_argument('--cvfold', type=int, default=0, help='Fold left-out for testing in leave-one-out setting '
                                                               'Options:{0,1}')
     parser.add_argument('--data_path', type=str, default='./datasets/S3DIS/blocks_bs1_s1',
@@ -52,7 +52,8 @@ if __name__ == '__main__':
     parser.add_argument('--pc_npts', type=int, default=2048, help='Number of input points for PointNet.')
     parser.add_argument('--pc_attribs', default='xyzrgbXYZ',
                         help='Point attributes fed to PointNets, if empty then all possible. '
-                             'xyz = coordinates, rgb = color, XYZ = normalized xyz')
+                             'xyz = coordinates, rgb = color, I = intensity, XYZ = normalized xyz. '
+                             'Use xyzIXYZ for FOR-Instance.')
     parser.add_argument('--pc_augm', action='store_true', help='Training augmentation for points in each superpoint')
     parser.add_argument('--pc_augm_scale', type=float, default=0,
                         help='Training augmentation: Uniformly random scaling in [1/scale, scale]')

@@ -41,8 +41,8 @@ def get_graph_feature(x, k=20, idx=None, dim9=False):
         if dim9 == False:
             idx = knn(x, k=k)   # (batch_size, num_points, k)
         else:
-            idx = knn(x[:, 6:], k=k)
-    device = torch.device('cuda')
+            idx = knn(x[:, -3:], k=k)
+    device = x.device
 
     idx_base = torch.arange(0, batch_size, device=device).view(-1, 1, 1)*num_points
 
@@ -326,7 +326,7 @@ class DGCNN_semseg(nn.Module):
         self.bn7 = nn.BatchNorm1d(512)
         self.bn8 = nn.BatchNorm1d(256)
 
-        self.conv1 = nn.Sequential(nn.Conv2d(18, 64, kernel_size=1, bias=False),
+        self.conv1 = nn.Sequential(nn.Conv2d(nfeat * 2, 64, kernel_size=1, bias=False),
                                    self.bn1,
                                    nn.LeakyReLU(negative_slope=0.2))
         self.conv2 = nn.Sequential(nn.Conv2d(64, 64, kernel_size=1, bias=False),
@@ -350,8 +350,8 @@ class DGCNN_semseg(nn.Module):
         batch_size = x.size(0)
         num_points = x.size(2)
         xyz = x[:, :3, :]
-        x = get_graph_feature(x, k=self.k, dim9=True)   # (batch_size, 9, num_points) -> (batch_size, 9*2, num_points, k)
-        x = self.conv1(x)                       # (batch_size, 9*2, num_points, k) -> (batch_size, 64, num_points, k)
+        x = get_graph_feature(x, k=self.k, dim9=True)   # (batch_size, nfeat, num_points) -> (batch_size, nfeat*2, num_points, k)
+        x = self.conv1(x)                       # (batch_size, nfeat*2, num_points, k) -> (batch_size, 64, num_points, k)
         x = self.conv2(x)                       # (batch_size, 64, num_points, k) -> (batch_size, 64, num_points, k)
         x1 = x.max(dim=-1, keepdim=False)[0]    # (batch_size, 64, num_points, k) -> (batch_size, 64, num_points)
 
