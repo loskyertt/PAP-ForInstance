@@ -5,6 +5,25 @@ import ast
 import argparse
 
 
+def count_pc_attrib_dims(pc_attribs):
+    dim = 0
+    if 'xyz' in pc_attribs:
+        dim += 3
+    if 'rgb' in pc_attribs:
+        dim += 3
+    if 'I' in pc_attribs:
+        dim += 1
+    if 'R' in pc_attribs:
+        dim += 1
+    if 'N' in pc_attribs:
+        dim += 1
+    if 'A' in pc_attribs:
+        dim += 1
+    if 'XYZ' in pc_attribs:
+        dim += 3
+    return dim
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
@@ -21,7 +40,7 @@ if __name__ == '__main__':
                         help='Path to the checkpoint of pre model for resuming')
     parser.add_argument('--model_checkpoint_path', type=str, default=None,
                         help='Path to the checkpoint of model for resuming')
-    parser.add_argument('--save_path', type=str, default='./logs/log_s3dis/',
+    parser.add_argument('--save_path', type=str, default='./log_s3dis/',
                         help='Directory to the save log and checkpoints')
     parser.add_argument('--eval_interval', type=int, default=1500,
                         help='iteration/epoch inverval to evaluate model')
@@ -52,8 +71,22 @@ if __name__ == '__main__':
     parser.add_argument('--pc_npts', type=int, default=2048, help='Number of input points for PointNet.')
     parser.add_argument('--pc_attribs', default='xyzrgbXYZ',
                         help='Point attributes fed to PointNets, if empty then all possible. '
-                             'xyz = coordinates, rgb = color, I = intensity, XYZ = normalized xyz. '
-                             'Use xyzIXYZ for FOR-Instance.')
+                             'xyz = coordinates, rgb = color, I = intensity, R = return number, '
+                             'N = number of returns, A = scan angle, XYZ = normalized xyz. '
+                             'Use xyzIRNAXYZ for FOR-Instance.')
+    parser.add_argument('--fg_sample_ratio', type=float, default=0.0,
+                        help='Minimum foreground point ratio when sampling target-class blocks. '
+                             'Useful for imbalanced FOR-Instance classes such as stem.')
+    parser.add_argument('--use_balanced_loss', action='store_true',
+                        help='Use dynamic class-balanced cross entropy for imbalanced point labels.')
+    parser.add_argument('--balanced_loss_beta', type=float, default=0.5,
+                        help='Blend factor for dynamic class-balanced loss weights.')
+    parser.add_argument('--use_height_proto', action='store_true',
+                        help='Use height-stratified forest prototypes for prototype matching.')
+    parser.add_argument('--height_proto_bins', type=int, default=3,
+                        help='Number of vertical bins for height-stratified prototypes.')
+    parser.add_argument('--height_proto_weight', type=float, default=0.2,
+                        help='Blend weight of height-stratified prototype similarity.')
     parser.add_argument('--pc_augm', action='store_true', help='Training augmentation for points in each superpoint')
     parser.add_argument('--pc_augm_scale', type=float, default=0,
                         help='Training augmentation: Uniformly random scaling in [1/scale, scale]')
@@ -107,7 +140,7 @@ if __name__ == '__main__':
     args.edgeconv_widths = ast.literal_eval(args.edgeconv_widths)
     args.dgcnn_mlp_widths = ast.literal_eval(args.dgcnn_mlp_widths)
     args.base_widths = ast.literal_eval(args.base_widths)
-    args.pc_in_dim = len(args.pc_attribs)
+    args.pc_in_dim = count_pc_attrib_dims(args.pc_attribs)
 
     # Start trainer for pre-train, proto-train, proto-eval, mpti-train, mpti-test
     if args.phase == 'mptitrain':

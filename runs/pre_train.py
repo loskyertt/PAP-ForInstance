@@ -52,6 +52,21 @@ class DGCNNSeg(nn.Module):
         return logits
 
 
+def balanced_cross_entropy(logits, labels, enabled=False, beta=0.5):
+    if not enabled:
+        return F.cross_entropy(logits, labels)
+
+    n_classes = logits.shape[1]
+    counts = torch.bincount(labels.reshape(-1), minlength=n_classes).float()
+    valid = counts > 0
+    weights = torch.ones(n_classes, device=logits.device)
+    if valid.any():
+        inv_freq = counts[valid].sum() / (counts[valid] + 1e-6)
+        inv_freq = inv_freq / inv_freq.mean()
+        weights[valid] = (1.0 - beta) + beta * inv_freq
+    return F.cross_entropy(logits, labels, weight=weights)
+
+
 def metric_evaluate(predicted_label, gt_label, NUM_CLASS):
     """
     :param predicted_label: (B,N) tensor
@@ -109,8 +124,9 @@ def pretrain(args):
         from dataloaders.forinstance import FORInstanceDataset
         if 'rgb' in args.pc_attribs:
             raise ValueError(
-                "FOR-Instance preprocessing stores [x,y,z,intensity,label], not RGB. "
-                "Use --pc_attribs xyzIXYZ for pretraining."
+                "FOR-Instance preprocessing stores "
+                "[x,y,z,intensity,return_number,number_of_returns,scan_angle,label], not RGB. "
+                "Use --pc_attribs xyzIRNAXYZ for pretraining."
             )
         DATASET = FORInstanceDataset(args.cvfold, args.data_path)
     else:
@@ -123,12 +139,14 @@ def pretrain(args):
     TRAIN_DATASET = MyPretrainDataset(args.data_path, CLASSES, CLASS2SCANS, mode='train',
                                       num_point=args.pc_npts, pc_attribs=args.pc_attribs,
                                       pc_augm=args.pc_augm, pc_augm_config=PC_AUGMENT_CONFIG,
-                                      label_col=DATASET.label_col)
+                                      label_col=DATASET.label_col,
+                                      fg_sample_ratio=args.fg_sample_ratio)
 
     VALID_DATASET = MyPretrainDataset(args.data_path, CLASSES, CLASS2SCANS, mode='test',
                                       num_point=args.pc_npts, pc_attribs=args.pc_attribs,
                                       pc_augm=args.pc_augm, pc_augm_config=PC_AUGMENT_CONFIG,
-                                      label_col=DATASET.label_col)
+                                      label_col=DATASET.label_col,
+                                      fg_sample_ratio=args.fg_sample_ratio)
 
     logger.cprint('=== Pre-train Dataset (classes: {0}) | Train: {1} blocks | Valid: {2} blocks ==='.format(
                                                      CLASSES, len(TRAIN_DATASET), len(VALID_DATASET)))
@@ -164,7 +182,12 @@ def pretrain(args):
                 labels = labels.cuda()
 
             logits = model(ptclouds)
-            loss = F.cross_entropy(logits, labels)
+            loss = balanced_cross_entropy(
+                logits,
+                labels,
+                enabled=args.use_balanced_loss,
+                beta=args.balanced_loss_beta,
+            )
 
             # Loss backwards and optimizer updates
             optimizer.zero_grad()
@@ -190,7 +213,12 @@ def pretrain(args):
                         labels = labels.cuda()
 
                     logits = model(ptclouds)
-                    loss = F.cross_entropy(logits, labels)
+                    loss = balanced_cross_entropy(
+                        logits,
+                        labels,
+                        enabled=args.use_balanced_loss,
+                        beta=args.balanced_loss_beta,
+                    )
 
                     # 　Compute predictions
                     _, preds = torch.max(logits.detach(), dim=1, keepdim=False)

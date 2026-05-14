@@ -44,6 +44,8 @@ class ProtoNet(nn.Module):
         self.in_channels = args.pc_in_dim
         self.n_points = args.pc_npts
         self.use_attention = args.use_attention
+        self.use_balanced_loss = getattr(args, 'use_balanced_loss', False)
+        self.balanced_loss_beta = getattr(args, 'balanced_loss_beta', 0.5)
 
         self.encoder = DGCNN(args.edgeconv_widths, args.dgcnn_mlp_widths, args.pc_in_dim, k=args.dgcnn_k)
         self.base_learner = BaseLearner(args.dgcnn_mlp_widths[-1], args.base_widths)
@@ -200,4 +202,17 @@ class ProtoNet(nn.Module):
     def computeCrossEntropyLoss(self, query_logits, query_labels):
         """ Calculate the CrossEntropy Loss for query set
         """
-        return F.cross_entropy(query_logits, query_labels)
+        if not self.use_balanced_loss:
+            return F.cross_entropy(query_logits, query_labels)
+
+        n_classes = query_logits.shape[1]
+        counts = torch.bincount(query_labels.reshape(-1), minlength=n_classes).float()
+        valid = counts > 0
+        weights = torch.ones(n_classes, device=query_logits.device)
+        if valid.any():
+            inv_freq = counts[valid].sum() / (counts[valid] + 1e-6)
+            inv_freq = inv_freq / inv_freq.mean()
+            weights[valid] = (1.0 - self.balanced_loss_beta) + (
+                self.balanced_loss_beta * inv_freq
+            )
+        return F.cross_entropy(query_logits, query_labels, weight=weights)

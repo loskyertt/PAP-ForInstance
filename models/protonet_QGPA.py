@@ -51,6 +51,11 @@ class ProtoNetAlignQGPASR(nn.Module):
         self.use_align = args.use_align
         self.use_linear_proj = args.use_linear_proj
         self.use_supervise_prototype = args.use_supervise_prototype
+        self.use_height_proto = args.use_height_proto
+        self.height_proto_bins = args.height_proto_bins
+        self.height_proto_weight = getattr(args, 'height_proto_weight', 0.2)
+        self.use_balanced_loss = getattr(args, 'use_balanced_loss', False)
+        self.balanced_loss_beta = getattr(args, 'balanced_loss_beta', 0.5)
         if args.use_high_dgcnn:
             self.encoder = DGCNN_semseg(args.edgeconv_widths, args.dgcnn_mlp_widths, args.pc_in_dim, k=args.dgcnn_k, return_edgeconvs=True)
         else:
@@ -80,6 +85,7 @@ class ProtoNetAlignQGPASR(nn.Module):
         Return:
             query_pred: query point clouds predicted similarity, shape: (n_queries, n_way+1, num_points)
         """
+        support_xyz = support_x[..., :3, :].contiguous()
         support_x = support_x.view(self.n_way*self.k_shot, self.in_channels, self.n_points)
         support_feat, _ = self.getFeatures(support_x)
         support_feat = support_feat.view(self.n_way, self.k_shot, -1, self.n_points)
@@ -92,6 +98,9 @@ class ProtoNetAlignQGPASR(nn.Module):
         # prototype learning
         fg_prototypes, bg_prototype = self.getPrototype(support_fg_feat, suppoer_bg_feat)
         prototypes = [bg_prototype] + fg_prototypes
+        height_prototypes = None
+        if self.use_height_proto:
+            height_prototypes = self.getHeightPrototype(support_feat, fg_mask, support_xyz)
 
         self_regulize_loss = 0
         if self.use_supervise_prototype:
@@ -102,11 +111,29 @@ class ProtoNetAlignQGPASR(nn.Module):
             support_feat_ = support_feat.mean(1)
             prototypes_all_post = self.transformer(query_feat, support_feat_, prototypes_all)
             prototypes_new = torch.chunk(prototypes_all_post, prototypes_all_post.shape[1], dim=1)
-            similarity = [self.calculateSimilarity_trans(query_feat, prototype.squeeze(1), self.dist_method) for prototype in prototypes_new]
+            similarity = []
+            for proto_idx, prototype in enumerate(prototypes_new):
+                base_sim = self.calculateSimilarity_trans(
+                    query_feat, prototype.squeeze(1), self.dist_method
+                )
+                if proto_idx > 0 and height_prototypes is not None:
+                    height_sim = self.calculateHeightSimilarity(
+                        query_feat, xyz, height_prototypes[proto_idx - 1], self.dist_method
+                    )
+                    base_sim = base_sim + self.height_proto_weight * height_sim
+                similarity.append(base_sim)
             query_pred = torch.stack(similarity, dim=1)
             loss = self.computeCrossEntropyLoss(query_pred, query_y)
         else:
-            similarity = [self.calculateSimilarity(query_feat, prototype, self.dist_method) for prototype in prototypes]
+            similarity = []
+            for proto_idx, prototype in enumerate(prototypes):
+                base_sim = self.calculateSimilarity(query_feat, prototype, self.dist_method)
+                if proto_idx > 0 and height_prototypes is not None:
+                    height_sim = self.calculateHeightSimilarity(
+                        query_feat, xyz, height_prototypes[proto_idx - 1], self.dist_method
+                    )
+                    base_sim = base_sim + self.height_proto_weight * height_sim
+                similarity.append(base_sim)
             query_pred = torch.stack(similarity, dim=1)
             loss = self.computeCrossEntropyLoss(query_pred, query_y)
         align_loss = 0
@@ -226,6 +253,67 @@ class ProtoNetAlignQGPASR(nn.Module):
         bg_prototype = bg_feat.sum(dim=(0,1)) / (self.n_way * self.k_shot)
         return fg_prototypes, bg_prototype
 
+    def getHeightPrototype(self, support_feat, fg_mask, support_xyz):
+        """
+        Build per-class foreground prototypes in vertical strata.
+
+        support_feat: (n_way, k_shot, feat_dim, num_points)
+        fg_mask:      (n_way, k_shot, num_points)
+        support_xyz:  (n_way, k_shot, 3, num_points)
+        """
+        bins = max(int(self.height_proto_bins), 1)
+        z = support_xyz[:, :, 2, :]
+        height_prototypes = []
+        for way in range(self.n_way):
+            way_proto = []
+            way_z = z[way]
+            z_min = way_z.min()
+            z_max = way_z.max()
+            z_norm = (way_z - z_min) / (z_max - z_min + 1e-6)
+            for bin_id in range(bins):
+                low = float(bin_id) / bins
+                high = float(bin_id + 1) / bins
+                if bin_id == bins - 1:
+                    bin_mask = (z_norm >= low) & (z_norm <= high)
+                else:
+                    bin_mask = (z_norm >= low) & (z_norm < high)
+                mask = fg_mask[way].bool() & bin_mask
+                if mask.sum() == 0:
+                    mask = fg_mask[way].bool()
+                mask = mask.unsqueeze(1).float()
+                proto = (support_feat[way] * mask).sum(dim=(0, 2)) / (
+                    mask.sum(dim=(0, 2)) + 1e-5
+                )
+                way_proto.append(proto)
+            height_prototypes.append(torch.stack(way_proto, dim=0))
+        return height_prototypes
+
+    def calculateHeightSimilarity(self, feat, xyz, prototypes, method='cosine', scaler=10):
+        """
+        Compute class similarity with height-stratified prototypes.
+
+        Query points softly select vertical prototypes by their normalized height.
+        """
+        bins = prototypes.shape[0]
+        z = xyz[:, :, 2]
+        z_min = z.min(dim=1, keepdim=True)[0]
+        z_max = z.max(dim=1, keepdim=True)[0]
+        z_norm = (z - z_min) / (z_max - z_min + 1e-6)
+        bin_centers = torch.linspace(
+            0.0, 1.0, bins, device=feat.device, dtype=feat.dtype
+        ).view(1, bins, 1)
+        weights = 1.0 - torch.abs(z_norm.unsqueeze(1) - bin_centers)
+        weights = torch.clamp(weights, min=0.0)
+        weights = weights / (weights.sum(dim=1, keepdim=True) + 1e-6)
+
+        similarities = []
+        for bin_id in range(bins):
+            similarities.append(
+                self.calculateSimilarity(feat, prototypes[bin_id], method, scaler)
+            )
+        sim = torch.stack(similarities, dim=1)
+        return (sim * weights).sum(dim=1)
+
     def calculateSimilarity(self, feat,  prototype, method='cosine', scaler=10):
         """
         Calculate the Similarity between query point-level features and prototypes
@@ -279,7 +367,20 @@ class ProtoNetAlignQGPASR(nn.Module):
     def computeCrossEntropyLoss(self, query_logits, query_labels):
         """ Calculate the CrossEntropy Loss for query set
         """
-        return F.cross_entropy(query_logits, query_labels)
+        if not self.use_balanced_loss:
+            return F.cross_entropy(query_logits, query_labels)
+
+        n_classes = query_logits.shape[1]
+        counts = torch.bincount(query_labels.reshape(-1), minlength=n_classes).float()
+        valid = counts > 0
+        weights = torch.ones(n_classes, device=query_logits.device)
+        if valid.any():
+            inv_freq = counts[valid].sum() / (counts[valid] + 1e-6)
+            inv_freq = inv_freq / inv_freq.mean()
+            weights[valid] = (1.0 - self.balanced_loss_beta) + (
+                self.balanced_loss_beta * inv_freq
+            )
+        return F.cross_entropy(query_logits, query_labels, weight=weights)
 
     def alignLoss_trans(self, qry_fts, pred, supp_fts, fore_mask, back_mask):
         """

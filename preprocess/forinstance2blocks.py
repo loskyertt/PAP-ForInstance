@@ -12,14 +12,17 @@ Key differences from room2blocks.py
 
 Input  (output of collect_forinstance_data.py):
     datasets/FORInstance/scenes_dev/data/*.npy
-    Each file: float32 [N, 5]
-        col 0-2 : x, y, z   (plot-local coordinates, meters)
-        col 3   : intensity  (normalized)
-        col 4   : label      (0-4, stored as float32)
+    Each file: float32 [N, 8]
+        col 0-2 : x, y, z
+        col 3   : intensity
+        col 4   : return_number
+        col 5   : number_of_returns
+        col 6   : scan_angle_rank
+        col 7   : label      (0-4, stored as float32)
 
 Output:
     datasets/FORInstance/blocks_dev_bs<size>_s<stride>/data/*.npy
-    Each file: float32 [M, 5]   (M varies; dataloader samples to fixed pc_npts)
+    Each file: float32 [M, 8]   (M varies; dataloader samples to fixed pc_npts)
     Same column layout as input — no additional normalization here.
     Block-level XY centering is performed in the dataloader, not here,
     to keep this script consistent with room2blocks.py.
