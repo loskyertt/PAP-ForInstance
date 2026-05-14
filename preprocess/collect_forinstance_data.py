@@ -5,13 +5,10 @@ Mirrors the role of collect_s3dis_data.py / collect_scannet_data.py.
 Only responsible for: read LAS → filter → remap labels → normalize → save .npy
 Block-cutting is handled separately by forinstance2blocks.py.
 
-Output format per file: float32 array of shape [N, 8]
-    col 0-2 : x, y, z             (shifted to plot-local origin, unit: meters)
-    col 3   : intensity            (min-max normalized to [0, 1])
-    col 4   : return_number        (min-max normalized to [0, 1])
-    col 5   : number_of_returns    (min-max normalized to [0, 1])
-    col 6   : scan_angle_rank      (scaled by max abs angle to [-1, 1])
-    col 7   : label                (int stored as float32; see LABEL_MAP below)
+Output format per file: float32 array of shape [N, 5]
+    col 0-2 : x, y, z        (shifted to plot-local origin, unit: meters)
+    col 3   : intensity       (min-max normalized to [0, 1])
+    col 4   : label           (int stored as float32; see LABEL_MAP below)
 
 Label mapping (remapped from raw 'classification' field):
     raw 2  →  0  terrain
@@ -88,11 +85,11 @@ def remap_labels(labels: np.ndarray) -> np.ndarray:
 
 def process_las_file(las_path: str, out_path: str) -> int:
     """
-    Read one .las file and save a cleaned [N, 8] .npy array.
+    Read one .las file and save a cleaned [N, 5] .npy array.
 
     Steps
     -----
-    1. Load x, y, z, LiDAR attributes, classification from the .las file.
+    1. Load x, y, z, intensity, classification from the .las file.
     2. Drop ignore labels (0 = unclassified, 3 = out-of-boundary points).
     3. Remap remaining labels to 0-4.
     4. Shift xyz so the per-plot minimum is at the origin.
@@ -108,18 +105,12 @@ def process_las_file(las_path: str, out_path: str) -> int:
         np.float64
     )  # keep float64 for precision
     intensity = np.array(las.intensity, dtype=np.float32)
-    return_number = np.array(las.return_number, dtype=np.float32)
-    number_of_returns = np.array(las.number_of_returns, dtype=np.float32)
-    scan_angle = np.array(las.scan_angle_rank, dtype=np.float32)
     labels_raw = np.array(las.classification, dtype=np.int64)
 
     # --- step 1: filter ignore labels ---
     valid = ~np.isin(labels_raw, list(IGNORE_LABELS))
     xyz = xyz[valid]
     intensity = intensity[valid]
-    return_number = return_number[valid]
-    number_of_returns = number_of_returns[valid]
-    scan_angle = scan_angle[valid]
     labels_raw = labels_raw[valid]
 
     # --- step 2: remap labels, drop any residual unmapped points ---
@@ -127,9 +118,6 @@ def process_las_file(las_path: str, out_path: str) -> int:
     valid2 = labels >= 0
     xyz = xyz[valid2]
     intensity = intensity[valid2]
-    return_number = return_number[valid2]
-    number_of_returns = number_of_returns[valid2]
-    scan_angle = scan_angle[valid2]
     labels = labels[valid2]
 
     if len(xyz) == 0:
@@ -144,25 +132,13 @@ def process_las_file(las_path: str, out_path: str) -> int:
     i_min, i_max = float(intensity.min()), float(intensity.max())
     intensity = (intensity - i_min) / (i_max - i_min + 1e-8)
 
-    rn_min, rn_max = float(return_number.min()), float(return_number.max())
-    return_number = (return_number - rn_min) / (rn_max - rn_min + 1e-8)
-
-    nr_min, nr_max = float(number_of_returns.min()), float(number_of_returns.max())
-    number_of_returns = (number_of_returns - nr_min) / (nr_max - nr_min + 1e-8)
-
-    angle_scale = max(float(np.max(np.abs(scan_angle))), 1.0)
-    scan_angle = scan_angle / angle_scale
-
-    # --- step 5: assemble [N, 8] ---
+    # --- step 5: assemble [N, 5] ---
     # Label is stored as float32 to keep the array homogeneous;
     # cast back to int64 when loading in the dataloader.
     data = np.column_stack(
         [
             xyz,  # (N, 3)
             intensity.reshape(-1, 1),  # (N, 1)
-            return_number.reshape(-1, 1),  # (N, 1)
-            number_of_returns.reshape(-1, 1),  # (N, 1)
-            scan_angle.reshape(-1, 1),  # (N, 1)
             labels.reshape(-1, 1).astype(np.float32),  # (N, 1)
         ]
     ).astype(np.float32)

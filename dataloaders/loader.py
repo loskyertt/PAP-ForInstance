@@ -4,11 +4,10 @@ Changes from original (PAP-FZS3D):
   1. Added `label_col` parameter chain through sample_pointcloud /
      sample_K_pointclouds / MyDataset / MyPretrainDataset so that
      datasets with different column layouts (e.g. FOR-Instance uses
-     col 7 for labels vs. S3DIS / ScanNet col 6) work without
+     col 4 for labels vs. S3DIS / ScanNet col 6) work without
      changing downstream code.
-  2. Added LiDAR attribute channel support ('I', 'R', 'N', 'A') in
-     sample_pointcloud so that pc_attribs='xyzIRNAXYZ' works for
-     FOR-Instance.
+  2. Added intensity channel ('I') support in sample_pointcloud so
+     that pc_attribs='xyzIXYZ' works for FOR-Instance.
   3. Added 'forinstance' branch in MyDataset.__init__.
   4. Fixed deprecated np.int → np.int64.
 """
@@ -40,7 +39,6 @@ def sample_K_pointclouds(
     sampled_classes,
     is_support=False,
     label_col=6,
-    fg_sample_ratio=0.0,
 ):
     """Sample K point clouds and the corresponding labels for one class (one way).
 
@@ -62,7 +60,6 @@ def sample_K_pointclouds(
             sampled_class,
             support=is_support,
             label_col=label_col,
-            fg_sample_ratio=fg_sample_ratio,
         )
         ptclouds.append(ptcloud)
         labels.append(label)
@@ -84,7 +81,6 @@ def sample_pointcloud(
     support=False,
     random_sample=False,
     label_col=6,
-    fg_sample_ratio=0.0,
 ):
     """Load one block .npy file and build a fixed-size point cloud tensor.
 
@@ -107,10 +103,8 @@ def sample_pointcloud(
         raise ValueError(
             f"pc_attribs='{pc_attribs}' requests rgb, but {scan_name}.npy has "
             f"only {data.shape[1]} columns. FOR-Instance blocks use "
-            "[x,y,z,intensity,return_number,number_of_returns,scan_angle,label]; "
-            "pass --pc_attribs xyzIRNAXYZ."
+            "[x,y,z,intensity,label]; pass --pc_attribs xyzIXYZ."
         )
-
     # ------------------------------------------------------------------ #
     # Point sampling
     # ------------------------------------------------------------------ #
@@ -134,23 +128,8 @@ def sample_pointcloud(
             sampled_valid_point_num,
             replace=(len(valid_point_inds) < sampled_valid_point_num),
         )
-        sampled_other_num = num_point - sampled_valid_point_num
-        if sampled_class != 0 and fg_sample_ratio > 0:
-            min_fg_num = int(num_point * fg_sample_ratio)
-            if sampled_valid_point_num < min_fg_num:
-                extra_fg_num = min(min_fg_num - sampled_valid_point_num, sampled_other_num)
-                sampled_extra_fg_inds = np.random.choice(
-                    valid_point_inds,
-                    extra_fg_num,
-                    replace=(len(valid_point_inds) < extra_fg_num),
-                )
-                sampled_valid_point_inds = np.concatenate(
-                    [sampled_valid_point_inds, sampled_extra_fg_inds]
-                )
-                sampled_other_num -= extra_fg_num
-
         sampled_other_point_inds = np.random.choice(
-            np.arange(N), sampled_other_num, replace=(N < sampled_other_num)
+            np.arange(N), num_point - sampled_valid_point_num, replace=(N < num_point)
         )
         sampled_point_inds = np.concatenate(
             [sampled_valid_point_inds, sampled_other_point_inds]
@@ -164,9 +143,6 @@ def sample_pointcloud(
     xyz = data[:, 0:3]  # always available
     rgb = data[:, 3:6]  # S3DIS / ScanNet
     intensity = data[:, 3:4]  # FOR-Instance (col 3)
-    return_number = data[:, 4:5]
-    number_of_returns = data[:, 5:6]
-    scan_angle = data[:, 6:7]
     labels = data[:, label_col].astype(np.int64)  # use label_col
 
     # ------------------------------------------------------------------ #
@@ -194,12 +170,6 @@ def sample_pointcloud(
         ptcloud.append(rgb / 255.0)
     if "I" in pc_attribs:
         ptcloud.append(intensity)  # already normalised to [0, 1]
-    if "R" in pc_attribs:
-        ptcloud.append(return_number)
-    if "N" in pc_attribs:
-        ptcloud.append(number_of_returns)
-    if "A" in pc_attribs:
-        ptcloud.append(scan_angle)
     if "XYZ" in pc_attribs:
         ptcloud.append(XYZ)
     ptcloud = np.concatenate(ptcloud, axis=1)
@@ -271,7 +241,6 @@ class MyDataset(Dataset):
         pc_attribs="xyz",
         pc_augm=False,
         pc_augm_config=None,
-        fg_sample_ratio=0.0,
     ):
         super(MyDataset).__init__()
         self.data_path = data_path
@@ -285,7 +254,6 @@ class MyDataset(Dataset):
         self.pc_attribs = pc_attribs
         self.pc_augm = pc_augm
         self.pc_augm_config = pc_augm_config
-        self.fg_sample_ratio = fg_sample_ratio
 
         # ------------------------------------------------------------------ #
         # Dataset instantiation
@@ -304,7 +272,7 @@ class MyDataset(Dataset):
             if "rgb" in pc_attribs:
                 raise ValueError(
                     "FOR-Instance does not provide RGB in this preprocessing pipeline. "
-                    "Use --pc_attribs xyzIRNAXYZ or another combination without 'rgb'."
+                    "Use --pc_attribs xyzIXYZ or another combination without 'rgb'."
                 )
             self.dataset = FORInstanceDataset(cvfold, data_path)
         else:
@@ -312,7 +280,7 @@ class MyDataset(Dataset):
 
         # label_col is read from the dataset object so that the correct column
         # is used in sample_pointcloud regardless of dataset type.
-        self.label_col = self.dataset.label_col
+        self.label_col = self.dataset.label_col  # type: ignore
 
         # ------------------------------------------------------------------ #
         # Train / test class split
@@ -415,7 +383,6 @@ class MyDataset(Dataset):
                 sampled_classes,
                 is_support=False,
                 label_col=self.label_col,
-                fg_sample_ratio=self.fg_sample_ratio,
             )
 
             support_ptclouds_one_way, support_masks_one_way = sample_K_pointclouds(
@@ -429,7 +396,6 @@ class MyDataset(Dataset):
                 sampled_classes,
                 is_support=True,
                 label_col=self.label_col,
-                fg_sample_ratio=self.fg_sample_ratio,
             )
 
             query_ptclouds.append(query_ptclouds_one_way)
@@ -514,31 +480,22 @@ class MyTestDataset(Dataset):
         )
         self.classes = dataset.classes
 
+        attrib_tag = (
+            "%s_label%d_" % (pc_attribs, dataset.label_col)
+            if dataset_name == "forinstance"
+            else ""
+        )
         if mode == "valid":
             test_data_path = os.path.join(
                 data_path,
-                "S_%d_N_%d_K_%d_%s_episodes_%d_pts_%d"
-                % (
-                    cvfold,
-                    n_way,
-                    k_shot,
-                    pc_attribs.replace(os.sep, "_"),
-                    num_episode_per_comb,
-                    num_point,
-                ),
+                "S_%d_N_%d_K_%d_%sepisodes_%d_pts_%d"
+                % (cvfold, n_way, k_shot, attrib_tag, num_episode_per_comb, num_point),
             )
         elif mode == "test":
             test_data_path = os.path.join(
                 data_path,
-                "S_%d_N_%d_K_%d_%s_test_episodes_%d_pts_%d"
-                % (
-                    cvfold,
-                    n_way,
-                    k_shot,
-                    pc_attribs.replace(os.sep, "_"),
-                    num_episode_per_comb,
-                    num_point,
-                ),
+                "S_%d_N_%d_K_%d_%stest_episodes_%d_pts_%d"
+                % (cvfold, n_way, k_shot, attrib_tag, num_episode_per_comb, num_point),
             )
         else:
             raise NotImplementedError("Mode (%s) is unknown!" % mode)
@@ -664,7 +621,6 @@ class MyPretrainDataset(Dataset):
         pc_augm=False,
         pc_augm_config=None,
         label_col=6,
-        fg_sample_ratio=0.0,
     ):  # ← NEW: default keeps S3DIS / ScanNet working
         super(MyPretrainDataset).__init__()
         self.data_path = data_path
@@ -673,7 +629,6 @@ class MyPretrainDataset(Dataset):
         self.pc_attribs = pc_attribs
         self.pc_augm = pc_augm
         self.pc_augm_config = pc_augm_config
-        self.fg_sample_ratio = fg_sample_ratio
         self.label_col = label_col  # ← stored for use in __getitem__
 
         train_block_names = []
@@ -713,7 +668,6 @@ class MyPretrainDataset(Dataset):
             self.classes,
             random_sample=True,
             label_col=self.label_col,
-            fg_sample_ratio=self.fg_sample_ratio,
         )
         return (
             torch.from_numpy(ptcloud.transpose().astype(np.float32)),

@@ -36,8 +36,7 @@ def train(args):
                               n_way=args.n_way, k_shot=args.k_shot, n_queries=args.n_queries,
                               phase=args.phase, mode='train',
                               num_point=args.pc_npts, pc_attribs=args.pc_attribs,
-                              pc_augm=args.pc_augm, pc_augm_config=PC_AUGMENT_CONFIG,
-                              fg_sample_ratio=args.fg_sample_ratio)
+                              pc_augm=args.pc_augm, pc_augm_config=PC_AUGMENT_CONFIG)
 
     VALID_DATASET = MyTestDataset(args.data_path, args.dataset, cvfold=args.cvfold,
                                   num_episode_per_comb=args.n_episode_test,

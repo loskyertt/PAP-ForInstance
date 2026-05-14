@@ -51,11 +51,9 @@ class ProtoNetAlignQGPASR(nn.Module):
         self.use_align = args.use_align
         self.use_linear_proj = args.use_linear_proj
         self.use_supervise_prototype = args.use_supervise_prototype
-        self.use_height_proto = args.use_height_proto
-        self.height_proto_bins = args.height_proto_bins
+        self.use_height_proto = getattr(args, 'use_height_proto', False)
+        self.height_proto_bins = getattr(args, 'height_proto_bins', 3)
         self.height_proto_weight = getattr(args, 'height_proto_weight', 0.2)
-        self.use_balanced_loss = getattr(args, 'use_balanced_loss', False)
-        self.balanced_loss_beta = getattr(args, 'balanced_loss_beta', 0.5)
         if args.use_high_dgcnn:
             self.encoder = DGCNN_semseg(args.edgeconv_widths, args.dgcnn_mlp_widths, args.pc_in_dim, k=args.dgcnn_k, return_edgeconvs=True)
         else:
@@ -120,7 +118,7 @@ class ProtoNetAlignQGPASR(nn.Module):
                     height_sim = self.calculateHeightSimilarity(
                         query_feat, xyz, height_prototypes[proto_idx - 1], self.dist_method
                     )
-                    base_sim = base_sim + self.height_proto_weight * height_sim
+                    base_sim = self.applyHeightResidual(base_sim, height_sim)
                 similarity.append(base_sim)
             query_pred = torch.stack(similarity, dim=1)
             loss = self.computeCrossEntropyLoss(query_pred, query_y)
@@ -132,7 +130,7 @@ class ProtoNetAlignQGPASR(nn.Module):
                     height_sim = self.calculateHeightSimilarity(
                         query_feat, xyz, height_prototypes[proto_idx - 1], self.dist_method
                     )
-                    base_sim = base_sim + self.height_proto_weight * height_sim
+                    base_sim = self.applyHeightResidual(base_sim, height_sim)
                 similarity.append(base_sim)
             query_pred = torch.stack(similarity, dim=1)
             loss = self.computeCrossEntropyLoss(query_pred, query_y)
@@ -142,7 +140,10 @@ class ProtoNetAlignQGPASR(nn.Module):
             align_loss_epi = self.alignLoss_trans(query_feat, query_pred, support_feat, fg_mask, bg_mask)
             align_loss += align_loss_epi
 
-        prototypes_all_post = prototypes_all_post.clone().detach()
+        if self.use_transformer:
+            prototypes_all_post = prototypes_all_post.clone().detach()
+        else:
+            prototypes_all_post = torch.stack(prototypes, dim=0).unsqueeze(0).detach()
         return query_pred, loss + align_loss + self_regulize_loss, prototypes_all_post
 
     def forward_test_semantic(self, support_x, support_y, query_x, query_y, embeddings=None):
@@ -288,6 +289,10 @@ class ProtoNetAlignQGPASR(nn.Module):
             height_prototypes.append(torch.stack(way_proto, dim=0))
         return height_prototypes
 
+    def applyHeightResidual(self, base_sim, height_sim):
+        """Add height-aware similarity as a residual correction."""
+        return base_sim + self.height_proto_weight * (height_sim - base_sim)
+
     def calculateHeightSimilarity(self, feat, xyz, prototypes, method='cosine', scaler=10):
         """
         Compute class similarity with height-stratified prototypes.
@@ -299,10 +304,11 @@ class ProtoNetAlignQGPASR(nn.Module):
         z_min = z.min(dim=1, keepdim=True)[0]
         z_max = z.max(dim=1, keepdim=True)[0]
         z_norm = (z - z_min) / (z_max - z_min + 1e-6)
-        bin_centers = torch.linspace(
-            0.0, 1.0, bins, device=feat.device, dtype=feat.dtype
+        bin_width = 1.0 / bins
+        bin_centers = (
+            (torch.arange(bins, device=feat.device, dtype=feat.dtype) + 0.5) / bins
         ).view(1, bins, 1)
-        weights = 1.0 - torch.abs(z_norm.unsqueeze(1) - bin_centers)
+        weights = 1.0 - torch.abs(z_norm.unsqueeze(1) - bin_centers) / bin_width
         weights = torch.clamp(weights, min=0.0)
         weights = weights / (weights.sum(dim=1, keepdim=True) + 1e-6)
 
@@ -367,20 +373,7 @@ class ProtoNetAlignQGPASR(nn.Module):
     def computeCrossEntropyLoss(self, query_logits, query_labels):
         """ Calculate the CrossEntropy Loss for query set
         """
-        if not self.use_balanced_loss:
-            return F.cross_entropy(query_logits, query_labels)
-
-        n_classes = query_logits.shape[1]
-        counts = torch.bincount(query_labels.reshape(-1), minlength=n_classes).float()
-        valid = counts > 0
-        weights = torch.ones(n_classes, device=query_logits.device)
-        if valid.any():
-            inv_freq = counts[valid].sum() / (counts[valid] + 1e-6)
-            inv_freq = inv_freq / inv_freq.mean()
-            weights[valid] = (1.0 - self.balanced_loss_beta) + (
-                self.balanced_loss_beta * inv_freq
-            )
-        return F.cross_entropy(query_logits, query_labels, weight=weights)
+        return F.cross_entropy(query_logits, query_labels)
 
     def alignLoss_trans(self, qry_fts, pred, supp_fts, fore_mask, back_mask):
         """

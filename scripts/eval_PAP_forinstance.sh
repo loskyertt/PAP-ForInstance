@@ -11,12 +11,14 @@ MLP_WIDTHS='[512, 256]'
 K=20
 BASE_WIDTHS='[128, 64]'
 
-MODEL_CHECKPOINT='./logs/log_forinstance_PAP/log_proto_forinstance_S0_N2_K1_Att1'
+MODEL_CHECKPOINT='./logs/log_forinstance_hproto/log_proto_forinstance_S0_N2_K1_Att1_HProto_B3_W0.20'
 PRETRAIN_CHECKPOINT='./logs/log_forinstance/log_pretrain_forinstance_S0'
 N_WAY=2
 K_SHOT=1
 N_QUESIES=1
 N_TEST_EPISODES=100
+HEIGHT_BINS=3
+HEIGHT_WEIGHT=0.2
 
 NUM_ITERS=40000
 EVAL_INTERVAL=2000
@@ -36,6 +38,7 @@ args=(--phase 'protoeval' --dataset "${DATASET}" --cvfold $SPLIT
       --n_iters $NUM_ITERS --eval_interval $EVAL_INTERVAL --batch_size 1
       --lr $LR --step_size $DECAY_STEP --gamma $DECAY_RATIO
       --n_way $N_WAY --k_shot $K_SHOT --n_queries $N_QUESIES --n_episode_test $N_TEST_EPISODES
-      --trans_lr 1e-4)
+      --trans_lr 1e-4 --use_height_proto
+      --height_proto_bins $HEIGHT_BINS --height_proto_weight $HEIGHT_WEIGHT)
 
 CUDA_VISIBLE_DEVICES=$GPU_ID python main.py "${args[@]}"

@@ -13,12 +13,6 @@ def count_pc_attrib_dims(pc_attribs):
         dim += 3
     if 'I' in pc_attribs:
         dim += 1
-    if 'R' in pc_attribs:
-        dim += 1
-    if 'N' in pc_attribs:
-        dim += 1
-    if 'A' in pc_attribs:
-        dim += 1
     if 'XYZ' in pc_attribs:
         dim += 3
     return dim
@@ -40,7 +34,7 @@ if __name__ == '__main__':
                         help='Path to the checkpoint of pre model for resuming')
     parser.add_argument('--model_checkpoint_path', type=str, default=None,
                         help='Path to the checkpoint of model for resuming')
-    parser.add_argument('--save_path', type=str, default='./log_s3dis/',
+    parser.add_argument('--save_path', type=str, default='./logs/log_s3dis/',
                         help='Directory to the save log and checkpoints')
     parser.add_argument('--eval_interval', type=int, default=1500,
                         help='iteration/epoch inverval to evaluate model')
@@ -71,22 +65,14 @@ if __name__ == '__main__':
     parser.add_argument('--pc_npts', type=int, default=2048, help='Number of input points for PointNet.')
     parser.add_argument('--pc_attribs', default='xyzrgbXYZ',
                         help='Point attributes fed to PointNets, if empty then all possible. '
-                             'xyz = coordinates, rgb = color, I = intensity, R = return number, '
-                             'N = number of returns, A = scan angle, XYZ = normalized xyz. '
-                             'Use xyzIRNAXYZ for FOR-Instance.')
-    parser.add_argument('--fg_sample_ratio', type=float, default=0.0,
-                        help='Minimum foreground point ratio when sampling target-class blocks. '
-                             'Useful for imbalanced FOR-Instance classes such as stem.')
-    parser.add_argument('--use_balanced_loss', action='store_true',
-                        help='Use dynamic class-balanced cross entropy for imbalanced point labels.')
-    parser.add_argument('--balanced_loss_beta', type=float, default=0.5,
-                        help='Blend factor for dynamic class-balanced loss weights.')
+                             'xyz = coordinates, rgb = color, I = intensity, XYZ = normalized xyz. '
+                             'Use xyzIXYZ for the current FOR-Instance adapted data.')
     parser.add_argument('--use_height_proto', action='store_true',
-                        help='Use height-stratified forest prototypes for prototype matching.')
+                        help='Use height-stratified residual prototypes for forest prototype matching.')
     parser.add_argument('--height_proto_bins', type=int, default=3,
                         help='Number of vertical bins for height-stratified prototypes.')
     parser.add_argument('--height_proto_weight', type=float, default=0.2,
-                        help='Blend weight of height-stratified prototype similarity.')
+                        help='Residual weight of height-stratified prototype similarity.')
     parser.add_argument('--pc_augm', action='store_true', help='Training augmentation for points in each superpoint')
     parser.add_argument('--pc_augm_scale', type=float, default=0,
                         help='Training augmentation: Uniformly random scaling in [1/scale, scale]')
@@ -150,9 +136,12 @@ if __name__ == '__main__':
         from runs.mpti_train import train
         train(args)
     elif args.phase == 'prototrain':
-        args.log_dir = args.save_path + 'log_proto_%s_S%d_N%d_K%d_Att%d' % (args.dataset, args.cvfold,
-                                                                             args.n_way, args.k_shot,
-                                                                             args.use_attention)
+        proto_tag = 'log_proto_%s_S%d_N%d_K%d_Att%d' % (args.dataset, args.cvfold,
+                                                        args.n_way, args.k_shot,
+                                                        args.use_attention)
+        if args.use_height_proto:
+            proto_tag += '_HProto_B%d_W%.2f' % (args.height_proto_bins, args.height_proto_weight)
+        args.log_dir = args.save_path + proto_tag
         from runs.proto_train import train
         train(args)
     elif args.phase == 'protoeval' or args.phase == 'mptieval':
