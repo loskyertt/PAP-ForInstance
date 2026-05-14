@@ -1,3 +1,13 @@
+# -*- coding: utf-8 -*-
+"""
+@File    :   preprocess/forinstance2blocks.py
+@Time    :   2026/05/14 16:55:07
+@Author  :   loskyertt
+@GitHub  :   https://github.com/loskyertt
+@Desc    :   ...
+"""
+
+
 """
 Step 2: Split per-plot .npy files into fixed-size overlapping blocks.
 

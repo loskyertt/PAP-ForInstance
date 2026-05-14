@@ -1,3 +1,13 @@
+# -*- coding: utf-8 -*-
+"""
+@File    :   preprocess/collect_forinstance_data.py
+@Time    :   2026/05/14 16:54:38
+@Author  :   loskyertt
+@GitHub  :   https://github.com/loskyertt
+@Desc    :   ...
+"""
+
+
 """
 Step 1: Convert FOR-Instance .las files to per-plot .npy files.
 

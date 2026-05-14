@@ -1,3 +1,13 @@
+# -*- coding: utf-8 -*-
+"""
+@File    :   dataloaders/forinstance.py
+@Time    :   2026/05/14 18:39:14
+@Author  :   loskyertt
+@GitHub  :   https://github.com/loskyertt
+@Desc    :   ...
+"""
+
+
 """Data Preprocess and Loader for FOR-Instance Dataset
 
 Mirrors the structure of s3dis.py / scannet.py exactly so that
