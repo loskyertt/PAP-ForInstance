@@ -281,7 +281,7 @@ class MyDataset(Dataset):
 
         # label_col is read from the dataset object so that the correct column
         # is used in sample_pointcloud regardless of dataset type.
-        self.label_col = self.dataset.label_col
+        self.label_col = self.dataset.label_col  # type: ignore
 
         # ------------------------------------------------------------------ #
         # Train / test class split
