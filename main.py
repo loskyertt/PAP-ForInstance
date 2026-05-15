@@ -13,6 +13,12 @@ def count_pc_attrib_dims(pc_attribs):
         dim += 3
     if 'I' in pc_attribs:
         dim += 1
+    if 'R' in pc_attribs:
+        dim += 1
+    if 'N' in pc_attribs:
+        dim += 1
+    if 'A' in pc_attribs:
+        dim += 1
     if 'XYZ' in pc_attribs:
         dim += 3
     return dim
@@ -65,8 +71,10 @@ if __name__ == '__main__':
     parser.add_argument('--pc_npts', type=int, default=2048, help='Number of input points for PointNet.')
     parser.add_argument('--pc_attribs', default='xyzrgbXYZ',
                         help='Point attributes fed to PointNets, if empty then all possible. '
-                             'xyz = coordinates, rgb = color, I = intensity, XYZ = normalized xyz. '
-                             'Use xyzIXYZ for the current FOR-Instance adapted data.')
+                             'xyz = coordinates, rgb = color, I = intensity, '
+                             'R = return number, N = number of returns, '
+                             'A = scan angle, XYZ = normalized xyz. '
+                             'Use xyzIRNAXYZ for full FOR-Instance LiDAR attributes.')
     parser.add_argument('--use_height_proto', action='store_true',
                         help='Use height-stratified residual prototypes for forest prototype matching.')
     parser.add_argument('--height_proto_bins', type=int, default=3,

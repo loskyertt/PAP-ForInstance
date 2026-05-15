@@ -15,13 +15,17 @@ loader.py can treat it as a drop-in replacement.
 
 Data format expected (output of collect_forinstance_data.py +
 forinstance2blocks.py):
-    float32 [N, 5]
+    float32 [N, 8]
         col 0-2 : x, y, z       (block-local coordinates, meters)
         col 3   : intensity      (min-max normalized to [0, 1])
-        col 4   : label          (0-4, stored as float32; cast to int64 on load)
+        col 4   : return_number  (normalized to [0, 1])
+        col 5   : number_returns (normalized to [0, 1])
+        col 6   : scan_angle     (normalized to roughly [-1, 1])
+        col 7   : label          (0-4, stored as float32; cast to int64 on load)
 
-This loader also accepts 8-column FOR-Instance blocks if they are present in
-another workspace, where the semantic label is stored in col 7.
+This loader still accepts old 5-column FOR-Instance blocks where the semantic
+label is stored in col 4, but R/N/A attributes require regenerated 8-column
+blocks.
 
 Label mapping (remapped from raw 'classification' field):
     0 → terrain
@@ -49,8 +53,10 @@ import numpy as np
 class FORInstanceDataset(object):
     # Column index of the label field in the preprocessed .npy blocks.
     # S3DIS / ScanNet use col 6 ([x,y,z,r,g,b,label]).
-    # FOR-Instance usually uses col 4 ([x,y,z,intensity,label]); keep detection
-    # so older/newer generated blocks do not silently break.
+    # Full-LiDAR FOR-Instance blocks use col 7
+    # ([x,y,z,intensity,return_number,number_returns,scan_angle,label]).
+    # Older adapted blocks use col 4 ([x,y,z,intensity,label]); keep detection
+    # so generated blocks do not silently break.
     LABEL_COL = None
     CLASS_NAMES = ["terrain", "low_vegetation", "stem", "live_branches", "woody_branches"]
 
@@ -212,6 +218,7 @@ class FORInstanceDataset(object):
 
         raise ValueError(
             "Could not detect FOR-Instance label column. Expected either "
-            "[x,y,z,intensity,label] or an 8-column block with labels in col 7; "
+            "[x,y,z,intensity,label] or "
+            "[x,y,z,intensity,return_number,number_returns,scan_angle,label]; "
             f"got shape {sample.shape} for {block_files[0]}"
         )

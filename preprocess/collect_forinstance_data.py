@@ -15,10 +15,13 @@ Mirrors the role of collect_s3dis_data.py / collect_scannet_data.py.
 Only responsible for: read LAS → filter → remap labels → normalize → save .npy
 Block-cutting is handled separately by forinstance2blocks.py.
 
-Output format per file: float32 array of shape [N, 5]
+Output format per file: float32 array of shape [N, 8]
     col 0-2 : x, y, z        (shifted to plot-local origin, unit: meters)
     col 3   : intensity       (min-max normalized to [0, 1])
-    col 4   : label           (int stored as float32; see LABEL_MAP below)
+    col 4   : return_number   (normalized to [0, 1])
+    col 5   : number_returns  (normalized to [0, 1])
+    col 6   : scan_angle      (normalized to roughly [-1, 1])
+    col 7   : label           (int stored as float32; see LABEL_MAP below)
 
 Label mapping (remapped from raw 'classification' field):
     raw 2  →  0  terrain
@@ -93,9 +96,23 @@ def remap_labels(labels: np.ndarray) -> np.ndarray:
     return mapped
 
 
+def get_las_dimension(las, name: str) -> np.ndarray:
+    """Read a required LAS point dimension."""
+    if hasattr(las, name):
+        return np.asarray(getattr(las, name))
+    dim_names = set(las.point_format.dimension_names)
+    if name in dim_names:
+        return np.asarray(las.points[name])
+    raise ValueError(
+        f"Required LAS dimension '{name}' is missing. "
+        "Full LiDAR attributes need return_number, number_of_returns, "
+        "and scan_angle or scan_angle_rank."
+    )
+
+
 def process_las_file(las_path: str, out_path: str) -> int:
     """
-    Read one .las file and save a cleaned [N, 5] .npy array.
+    Read one .las file and save a cleaned [N, 8] .npy array.
 
     Steps
     -----
@@ -103,8 +120,8 @@ def process_las_file(las_path: str, out_path: str) -> int:
     2. Drop ignore labels (0 = unclassified, 3 = out-of-boundary points).
     3. Remap remaining labels to 0-4.
     4. Shift xyz so the per-plot minimum is at the origin.
-    5. Normalize intensity with per-plot min-max scaling.
-    6. Stack into [N, 5] and save.
+    5. Normalize intensity / return attributes / scan angle per plot.
+    6. Stack into [N, 8] and save.
 
     Returns the number of points saved (0 if the file is skipped).
     """
@@ -115,12 +132,22 @@ def process_las_file(las_path: str, out_path: str) -> int:
         np.float64
     )  # keep float64 for precision
     intensity = np.array(las.intensity, dtype=np.float32)
+    return_number = get_las_dimension(las, "return_number").astype(np.float32)
+    number_of_returns = get_las_dimension(las, "number_of_returns").astype(np.float32)
+    dim_names = set(las.point_format.dimension_names)
+    if "scan_angle" in dim_names or hasattr(las, "scan_angle"):
+        scan_angle = get_las_dimension(las, "scan_angle").astype(np.float32)
+    else:
+        scan_angle = get_las_dimension(las, "scan_angle_rank").astype(np.float32)
     labels_raw = np.array(las.classification, dtype=np.int64)
 
     # --- step 1: filter ignore labels ---
     valid = ~np.isin(labels_raw, list(IGNORE_LABELS))
     xyz = xyz[valid]
     intensity = intensity[valid]
+    return_number = return_number[valid]
+    number_of_returns = number_of_returns[valid]
+    scan_angle = scan_angle[valid]
     labels_raw = labels_raw[valid]
 
     # --- step 2: remap labels, drop any residual unmapped points ---
@@ -128,6 +155,9 @@ def process_las_file(las_path: str, out_path: str) -> int:
     valid2 = labels >= 0
     xyz = xyz[valid2]
     intensity = intensity[valid2]
+    return_number = return_number[valid2]
+    number_of_returns = number_of_returns[valid2]
+    scan_angle = scan_angle[valid2]
     labels = labels[valid2]
 
     if len(xyz) == 0:
@@ -142,13 +172,23 @@ def process_las_file(las_path: str, out_path: str) -> int:
     i_min, i_max = float(intensity.min()), float(intensity.max())
     intensity = (intensity - i_min) / (i_max - i_min + 1e-8)
 
-    # --- step 5: assemble [N, 5] ---
+    return_scale = max(float(return_number.max()), float(number_of_returns.max()), 1.0)
+    return_number = return_number / return_scale
+    number_of_returns = number_of_returns / return_scale
+
+    angle_scale = max(float(np.max(np.abs(scan_angle))), 1.0)
+    scan_angle = scan_angle / angle_scale
+
+    # --- step 5: assemble [N, 8] ---
     # Label is stored as float32 to keep the array homogeneous;
     # cast back to int64 when loading in the dataloader.
     data = np.column_stack(
         [
             xyz,  # (N, 3)
             intensity.reshape(-1, 1),  # (N, 1)
+            return_number.reshape(-1, 1),  # (N, 1)
+            number_of_returns.reshape(-1, 1),  # (N, 1)
+            scan_angle.reshape(-1, 1),  # (N, 1)
             labels.reshape(-1, 1).astype(np.float32),  # (N, 1)
         ]
     ).astype(np.float32)

@@ -22,14 +22,17 @@ Key differences from room2blocks.py
 
 Input  (output of collect_forinstance_data.py):
     datasets/FORInstance/scenes_dev/data/*.npy
-    Each file: float32 [N, 5]
-        col 0-2 : x, y, z   (plot-local coordinates, meters)
-        col 3   : intensity  (normalized)
-        col 4   : label      (0-4, stored as float32)
+    Each file: float32 [N, 8]
+        col 0-2 : x, y, z        (plot-local coordinates, meters)
+        col 3   : intensity       (normalized)
+        col 4   : return_number   (normalized)
+        col 5   : number_returns  (normalized)
+        col 6   : scan_angle      (normalized)
+        col 7   : label           (0-4, stored as float32)
 
 Output:
     datasets/FORInstance/blocks_dev_bs<size>_s<stride>/data/*.npy
-    Each file: float32 [M, 5]   (M varies; dataloader samples to fixed pc_npts)
+    Each file: float32 [M, 8]   (M varies; dataloader samples to fixed pc_npts)
     Same column layout as input — no additional normalization here.
     Block-level XY centering is performed in the dataloader, not here,
     to keep this script consistent with room2blocks.py.
@@ -70,12 +73,14 @@ def plot2blocks(
     only the default parameters differ (larger block / stride for outdoor scenes).
 
     Args:
+        Full-LiDAR input/output keeps all columns, i.e. [xyz, I, R, N, A, label].
         data      : float32 [N, 5] — x, y, z, intensity, label
         block_size: physical edge length of each block (meters)
         stride    : sliding step (meters); stride <= block_size gives overlap
         min_npts  : discard blocks with fewer points than this threshold
 
     Returns:
+        Blocks keep the same column count as the input scene array.
         list of float32 arrays, each [M, 5]  (M varies per block)
     """
     assert stride <= block_size, (
@@ -196,7 +201,7 @@ def main():
 
     for fp in file_paths:
         plot_name = os.path.basename(fp)[:-4]  # strip .npy
-        data = np.load(fp)  # [N, 5]
+        data = np.load(fp)  # [N, C]
 
         blocks = plot2blocks(data, args.block_size, args.stride, args.min_npts)
 

@@ -6,8 +6,8 @@ Changes from original (PAP-FZS3D):
      datasets with different column layouts (e.g. FOR-Instance uses
      col 4 for labels vs. S3DIS / ScanNet col 6) work without
      changing downstream code.
-  2. Added intensity channel ('I') support in sample_pointcloud so
-     that pc_attribs='xyzIXYZ' works for FOR-Instance.
+  2. Added LiDAR channel support ('I', 'R', 'N', 'A') in sample_pointcloud so
+     that pc_attribs='xyzIRNAXYZ' works for FOR-Instance.
   3. Added 'forinstance' branch in MyDataset.__init__.
   4. Fixed deprecated np.int → np.int64.
 """
@@ -103,7 +103,17 @@ def sample_pointcloud(
         raise ValueError(
             f"pc_attribs='{pc_attribs}' requests rgb, but {scan_name}.npy has "
             f"only {data.shape[1]} columns. FOR-Instance blocks use "
-            "[x,y,z,intensity,label]; pass --pc_attribs xyzIXYZ."
+            "[x,y,z,intensity,label] or full LiDAR attributes; "
+            "pass --pc_attribs xyzIXYZ/xyzIRNAXYZ."
+        )
+
+    lidar_extra_requested = any(code in pc_attribs for code in ("R", "N", "A"))
+    if lidar_extra_requested and label_col < 7:
+        raise ValueError(
+            f"pc_attribs='{pc_attribs}' requests R/N/A, but {scan_name}.npy "
+            f"uses label_col={label_col}. Regenerate FOR-Instance data with "
+            "preprocess/collect_forinstance_data.py and forinstance2blocks.py "
+            "on this full-LiDAR branch."
         )
     # ------------------------------------------------------------------ #
     # Point sampling
@@ -143,6 +153,9 @@ def sample_pointcloud(
     xyz = data[:, 0:3]  # always available
     rgb = data[:, 3:6]  # S3DIS / ScanNet
     intensity = data[:, 3:4]  # FOR-Instance (col 3)
+    return_number = data[:, 4:5] if label_col >= 7 else None
+    number_of_returns = data[:, 5:6] if label_col >= 7 else None
+    scan_angle = data[:, 6:7] if label_col >= 7 else None
     labels = data[:, label_col].astype(np.int64)  # use label_col
 
     # ------------------------------------------------------------------ #
@@ -170,6 +183,12 @@ def sample_pointcloud(
         ptcloud.append(rgb / 255.0)
     if "I" in pc_attribs:
         ptcloud.append(intensity)  # already normalised to [0, 1]
+    if "R" in pc_attribs:
+        ptcloud.append(return_number)
+    if "N" in pc_attribs:
+        ptcloud.append(number_of_returns)
+    if "A" in pc_attribs:
+        ptcloud.append(scan_angle)
     if "XYZ" in pc_attribs:
         ptcloud.append(XYZ)
     ptcloud = np.concatenate(ptcloud, axis=1)
@@ -272,7 +291,8 @@ class MyDataset(Dataset):
             if "rgb" in pc_attribs:
                 raise ValueError(
                     "FOR-Instance does not provide RGB in this preprocessing pipeline. "
-                    "Use --pc_attribs xyzIXYZ or another combination without 'rgb'."
+                    "Use --pc_attribs xyzIRNAXYZ/xyzIXYZ or another combination "
+                    "without 'rgb'."
                 )
             self.dataset = FORInstanceDataset(cvfold, data_path)
         else:

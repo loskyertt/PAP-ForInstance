@@ -3,10 +3,10 @@ GPU_ID=0
 DATASET='forinstance'
 SPLIT=0
 DATA_PATH='./datasets/FORInstance/blocks_dev_bs10.0_s5.0'
-SAVE_PATH='./logs/log_forinstance/'
+SAVE_PATH='./logs/log_forinstance_full_lidar/'
 
 NUM_POINTS=2048
-PC_ATTRIBS='xyzIXYZ'
+PC_ATTRIBS='xyzIRNAXYZ'
 EDGECONV_WIDTHS='[[64,64], [64, 64], [64, 64]]'
 MLP_WIDTHS='[512, 256]'
 K=20
