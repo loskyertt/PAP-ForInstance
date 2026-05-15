@@ -1,0 +1,4 @@
+# Height-stratified residual prototype ablation for FOR-Instance.
+save_path: ./logs/log_forinstance_hproto_lambda_010/
+height_proto_bins: 3
+height_proto_weight: 0.10
