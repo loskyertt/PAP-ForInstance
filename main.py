@@ -73,6 +73,10 @@ if __name__ == '__main__':
                         help='Number of vertical bins for height-stratified prototypes.')
     parser.add_argument('--height_proto_weight', type=float, default=0.2,
                         help='Residual weight of height-stratified prototype similarity.')
+    parser.add_argument('--use_balanced_loss', action='store_true',
+                        help='Use episode-wise class-balanced cross entropy for query supervision.')
+    parser.add_argument('--balanced_loss_max_weight', type=float, default=5.0,
+                        help='Maximum per-class weight for balanced query cross entropy.')
     parser.add_argument('--pc_augm', action='store_true', help='Training augmentation for points in each superpoint')
     parser.add_argument('--pc_augm_scale', type=float, default=0,
                         help='Training augmentation: Uniformly random scaling in [1/scale, scale]')
@@ -141,6 +145,8 @@ if __name__ == '__main__':
                                                         args.use_attention)
         if args.use_height_proto:
             proto_tag += '_HProto_B%d_W%.2f' % (args.height_proto_bins, args.height_proto_weight)
+        if args.use_balanced_loss:
+            proto_tag += '_BLoss_M%.1f' % args.balanced_loss_max_weight
         args.log_dir = args.save_path + proto_tag
         from runs.proto_train import train
         train(args)

@@ -54,6 +54,8 @@ class ProtoNetAlignQGPASR(nn.Module):
         self.use_height_proto = getattr(args, 'use_height_proto', False)
         self.height_proto_bins = getattr(args, 'height_proto_bins', 3)
         self.height_proto_weight = getattr(args, 'height_proto_weight', 0.2)
+        self.use_balanced_loss = getattr(args, 'use_balanced_loss', False)
+        self.balanced_loss_max_weight = getattr(args, 'balanced_loss_max_weight', 5.0)
         if args.use_high_dgcnn:
             self.encoder = DGCNN_semseg(args.edgeconv_widths, args.dgcnn_mlp_widths, args.pc_in_dim, k=args.dgcnn_k, return_edgeconvs=True)
         else:
@@ -373,7 +375,24 @@ class ProtoNetAlignQGPASR(nn.Module):
     def computeCrossEntropyLoss(self, query_logits, query_labels):
         """ Calculate the CrossEntropy Loss for query set
         """
-        return F.cross_entropy(query_logits, query_labels)
+        if not self.use_balanced_loss:
+            return F.cross_entropy(query_logits, query_labels)
+
+        n_classes = query_logits.shape[1]
+        labels = query_labels.reshape(-1)
+        counts = torch.bincount(labels, minlength=n_classes).float()
+        valid = counts > 0
+        weights = torch.ones(n_classes, device=query_logits.device, dtype=query_logits.dtype)
+
+        if valid.any():
+            valid_counts = counts[valid].to(query_logits.device, dtype=query_logits.dtype)
+            valid_count = valid_counts.numel()
+            raw_weights = valid_counts.sum() / (valid_count * valid_counts.clamp_min(1.0))
+            raw_weights = torch.clamp(raw_weights, max=self.balanced_loss_max_weight)
+            raw_weights = raw_weights / (raw_weights.mean() + 1e-6)
+            weights[valid.to(query_logits.device)] = raw_weights
+
+        return F.cross_entropy(query_logits, query_labels, weight=weights)
 
     def alignLoss_trans(self, qry_fts, pred, supp_fts, fore_mask, back_mask):
         """
