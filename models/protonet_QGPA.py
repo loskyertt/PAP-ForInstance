@@ -54,6 +54,8 @@ class ProtoNetAlignQGPASR(nn.Module):
         self.use_height_proto = getattr(args, 'use_height_proto', False)
         self.height_proto_bins = getattr(args, 'height_proto_bins', 3)
         self.height_proto_weight = getattr(args, 'height_proto_weight', 0.2)
+        self.use_height_aware = getattr(args, 'use_height_aware', False)
+        self.height_aware_blend = getattr(args, 'height_aware_blend', 0.5)
         if args.use_high_dgcnn:
             self.encoder = DGCNN_semseg(args.edgeconv_widths, args.dgcnn_mlp_widths, args.pc_in_dim, k=args.dgcnn_k, return_edgeconvs=True)
         else:
@@ -83,6 +85,7 @@ class ProtoNetAlignQGPASR(nn.Module):
         Return:
             query_pred: query point clouds predicted similarity, shape: (n_queries, n_way+1, num_points)
         """
+        support_x_raw = support_x
         support_xyz = support_x[..., :3, :].contiguous()
         support_x = support_x.view(self.n_way*self.k_shot, self.in_channels, self.n_points)
         support_feat, _ = self.getFeatures(support_x)
@@ -99,6 +102,9 @@ class ProtoNetAlignQGPASR(nn.Module):
         height_prototypes = None
         if self.use_height_proto:
             height_prototypes = self.getHeightPrototype(support_feat, fg_mask, support_xyz)
+        height_weight = None
+        if self.use_height_aware:
+            height_weight = self.calculateHeightAwareWeight(support_x_raw, support_y, query_x)
 
         self_regulize_loss = 0
         if self.use_supervise_prototype:
@@ -119,6 +125,9 @@ class ProtoNetAlignQGPASR(nn.Module):
                         query_feat, xyz, height_prototypes[proto_idx - 1], self.dist_method
                     )
                     base_sim = self.applyHeightResidual(base_sim, height_sim)
+                if proto_idx > 0 and height_weight is not None:
+                    hw = height_weight[:, proto_idx-1, :]
+                    base_sim = base_sim * (1 - self.height_aware_blend + self.height_aware_blend * hw)
                 similarity.append(base_sim)
             query_pred = torch.stack(similarity, dim=1)
             loss = self.computeCrossEntropyLoss(query_pred, query_y)
@@ -131,6 +140,9 @@ class ProtoNetAlignQGPASR(nn.Module):
                         query_feat, xyz, height_prototypes[proto_idx - 1], self.dist_method
                     )
                     base_sim = self.applyHeightResidual(base_sim, height_sim)
+                if proto_idx > 0 and height_weight is not None:
+                    hw = height_weight[:, proto_idx-1, :]
+                    base_sim = base_sim * (1 - self.height_aware_blend + self.height_aware_blend * hw)
                 similarity.append(base_sim)
             query_pred = torch.stack(similarity, dim=1)
             loss = self.computeCrossEntropyLoss(query_pred, query_y)
@@ -292,6 +304,46 @@ class ProtoNetAlignQGPASR(nn.Module):
     def applyHeightResidual(self, base_sim, height_sim):
         """Add height-aware similarity as a residual correction."""
         return base_sim + self.height_proto_weight * (height_sim - base_sim)
+
+    def calculateHeightAwareWeight(self, support_x, support_y, query_x):
+        """
+        Compute per-class Gaussian height-aware weighting for query points.
+
+        Uses normalized Z (index 6 in xyzIXYZ) to compute class-conditional
+        height distributions from support points, then weights query points
+        via a Gaussian kernel: w_c(q) = exp(-(z_q - mu_c)^2 / (2*sigma_c^2 + eps))
+
+        Args:
+            support_x: (n_way, k_shot, in_channels, num_points)
+            support_y: (n_way, k_shot, num_points) binary fg masks
+            query_x:   (n_queries, in_channels, num_points)
+        Returns:
+            height_weight: (n_queries, n_way, num_points)
+        """
+        n_way = support_x.shape[0]
+        n_queries = query_x.shape[0]
+        n_points = query_x.shape[2]
+
+        support_z = support_x[:, :, 6, :]  # (n_way, k_shot, num_points)
+        query_z = query_x[:, 6, :]          # (n_queries, num_points)
+        fg_mask = support_y.bool()          # (n_way, k_shot, num_points)
+
+        height_weights = []
+        for way in range(n_way):
+            way_mask = fg_mask[way]                # (k_shot, num_points)
+            way_z = support_z[way][way_mask]       # (N_fg,)
+
+            if way_z.numel() == 0:
+                weight = torch.ones(n_queries, n_points, device=query_x.device)
+            else:
+                mu = way_z.mean()
+                sigma = way_z.std() + 1e-6
+                diff = query_z - mu
+                weight = torch.exp(-diff ** 2 / (2 * sigma ** 2 + 1e-8))
+
+            height_weights.append(weight.unsqueeze(1))  # (n_queries, 1, n_points)
+
+        return torch.cat(height_weights, dim=1)  # (n_queries, n_way, n_points)
 
     def calculateHeightSimilarity(self, feat, xyz, prototypes, method='cosine', scaler=10):
         """

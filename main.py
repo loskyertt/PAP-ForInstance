@@ -68,11 +68,15 @@ if __name__ == '__main__':
                              'xyz = coordinates, rgb = color, I = intensity, XYZ = normalized xyz. '
                              'Use xyzIXYZ for the current FOR-Instance adapted data.')
     parser.add_argument('--use_height_proto', action='store_true',
-                        help='Use height-stratified residual prototypes for forest prototype matching.')
+                        help='[DEPRECATED] Use height-stratified residual prototypes for forest prototype matching.')
     parser.add_argument('--height_proto_bins', type=int, default=3,
                         help='Number of vertical bins for height-stratified prototypes.')
     parser.add_argument('--height_proto_weight', type=float, default=0.2,
                         help='Residual weight of height-stratified prototype similarity.')
+    parser.add_argument('--use_height_aware', action='store_true',
+                        help='Use height-aware similarity metric (Gaussian kernel soft prior).')
+    parser.add_argument('--height_aware_blend', type=float, default=0.5,
+                        help='Blend factor for height-aware weight [0-1]. 1 = full Gaussian, 0 = no effect.')
     parser.add_argument('--pc_augm', action='store_true', help='Training augmentation for points in each superpoint')
     parser.add_argument('--pc_augm_scale', type=float, default=0,
                         help='Training augmentation: Uniformly random scaling in [1/scale, scale]')
@@ -139,7 +143,9 @@ if __name__ == '__main__':
         proto_tag = 'log_proto_%s_S%d_N%d_K%d_Att%d' % (args.dataset, args.cvfold,
                                                         args.n_way, args.k_shot,
                                                         args.use_attention)
-        if args.use_height_proto:
+        if args.use_height_aware:
+            proto_tag += '_HAware_B%.2f' % (args.height_aware_blend)
+        elif args.use_height_proto:
             proto_tag += '_HProto_B%d_W%.2f' % (args.height_proto_bins, args.height_proto_weight)
         args.log_dir = args.save_path + proto_tag
         from runs.proto_train import train

@@ -3,7 +3,7 @@ GPU_ID=0
 DATASET='forinstance'
 SPLIT=0
 DATA_PATH='./datasets/FORInstance/blocks_dev_bs10.0_s5.0'
-SAVE_PATH='./logs/log_forinstance_hproto/'
+SAVE_PATH='./logs/log_forinstance_haware/'
 
 NUM_POINTS=2048
 PC_ATTRIBS='xyzIXYZ'
@@ -17,8 +17,7 @@ N_WAY=2
 K_SHOT=1
 N_QUESIES=1
 N_TEST_EPISODES=100
-HEIGHT_BINS=3
-HEIGHT_WEIGHT=0.2
+HEIGHT_AWARE_BLEND=0.5
 
 NUM_ITERS=40000
 EVAL_INTERVAL=2000
@@ -37,7 +36,6 @@ args=(--phase 'prototrain' --dataset "${DATASET}" --cvfold $SPLIT
       --n_iters $NUM_ITERS --eval_interval $EVAL_INTERVAL --batch_size 1
       --lr $LR --step_size $DECAY_STEP --gamma $DECAY_RATIO
       --n_way $N_WAY --k_shot $K_SHOT --n_queries $N_QUESIES --n_episode_test $N_TEST_EPISODES
-      --trans_lr 1e-4 --use_height_proto
-      --height_proto_bins $HEIGHT_BINS --height_proto_weight $HEIGHT_WEIGHT)
+      --trans_lr 1e-4 --use_height_aware --height_aware_blend $HEIGHT_AWARE_BLEND)
 
 CUDA_VISIBLE_DEVICES=$GPU_ID python main.py "${args[@]}"
