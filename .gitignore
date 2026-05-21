@@ -81,3 +81,5 @@ datasets/*/blocks*/S_*_test_episodes_*/
 .obsidian
 paper
 trash
+.agents
+.claude
