@@ -74,9 +74,7 @@ if __name__ == '__main__':
     parser.add_argument('--height_proto_weight', type=float, default=0.2,
                         help='Residual weight of height-stratified prototype similarity.')
     parser.add_argument('--use_height_aware', action='store_true',
-                        help='Use height-aware similarity metric (Gaussian kernel soft prior).')
-    parser.add_argument('--height_aware_blend', type=float, default=0.5,
-                        help='Blend factor for height-aware weight [0-1]. 1 = full Gaussian, 0 = no effect.')
+                        help='Use height-aware support-point weighted prototypes (learnable alpha).')
     parser.add_argument('--pc_augm', action='store_true', help='Training augmentation for points in each superpoint')
     parser.add_argument('--pc_augm_scale', type=float, default=0,
                         help='Training augmentation: Uniformly random scaling in [1/scale, scale]')
@@ -144,7 +142,7 @@ if __name__ == '__main__':
                                                         args.n_way, args.k_shot,
                                                         args.use_attention)
         if args.use_height_aware:
-            proto_tag += '_HAware_B%.2f' % (args.height_aware_blend)
+            proto_tag += '_HAware'
         elif args.use_height_proto:
             proto_tag += '_HProto_B%d_W%.2f' % (args.height_proto_bins, args.height_proto_weight)
         args.log_dir = args.save_path + proto_tag

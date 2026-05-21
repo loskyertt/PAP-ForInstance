@@ -25,25 +25,32 @@ class ProtoLearner(object):
             self.model.cuda()
 
         if mode == 'train':
+            extra_params = []
+            if getattr(args, 'use_height_aware', False):
+                extra_params.append(self.model.height_alpha)
             if args.use_attention:
                 if args.use_transformer:
                     self.optimizer = torch.optim.Adam(
                     [{'params': self.model.encoder.parameters(), 'lr': 0.0001},
                      {'params': self.model.base_learner.parameters()},
                      {'params': self.model.transformer.parameters(), 'lr': args.trans_lr},
-                     {'params': self.model.att_learner.parameters()}
+                     {'params': self.model.att_learner.parameters()},
+                     {'params': extra_params}
                      ], lr=args.lr)
                 else:
                     self.optimizer = torch.optim.Adam(
                     [{'params': self.model.encoder.parameters(), 'lr': 0.0001},
                      {'params': self.model.base_learner.parameters()},
-                     {'params': self.model.att_learner.parameters()}
+                     {'params': self.model.att_learner.parameters()},
+                     {'params': extra_params}
                      ], lr=args.lr)
             else:
                 self.optimizer = torch.optim.Adam(
                     [{'params': self.model.encoder.parameters(), 'lr': 0.0001},
                      {'params': self.model.base_learner.parameters()},
-                     {'params': self.model.linear_mapper.parameters()}], lr=args.lr)
+                     {'params': self.model.linear_mapper.parameters()},
+                     {'params': extra_params}
+                     ], lr=args.lr)
             #set learning rate scheduler
             self.lr_scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=args.step_size,
                                                           gamma=args.gamma)
