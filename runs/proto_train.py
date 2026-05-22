@@ -59,7 +59,14 @@ def train(args):
 
         loss, accuracy = PL.train(data, sampled_classes)
         if (batch_idx+1) % 100 == 0:
-            logger.cprint('=====[Train] Iter: %d | Loss: %.4f | Accuracy: %f =====' % (batch_idx, loss, accuracy))
+            if hasattr(PL.model, 'height_alpha'):
+                alpha_val = PL.model.height_alpha.detach().item()
+                logger.cprint('=====[Train] Iter: %d | Loss: %.4f | Accuracy: %f | Alpha: %.6f ====='
+                              % (batch_idx, loss, accuracy, alpha_val))
+                WRITER.add_scalar('Train/alpha', alpha_val, batch_idx)
+            else:
+                logger.cprint('=====[Train] Iter: %d | Loss: %.4f | Accuracy: %f ====='
+                              % (batch_idx, loss, accuracy))
             WRITER.add_scalar('Train/loss', loss, batch_idx)
             WRITER.add_scalar('Train/accuracy', accuracy, batch_idx)
 
@@ -70,6 +77,8 @@ def train(args):
 
             WRITER.add_scalar('Valid/loss', valid_loss, batch_idx)
             WRITER.add_scalar('Valid/meanIoU', mean_IoU, batch_idx)
+            if hasattr(PL.model, 'height_alpha'):
+                WRITER.add_scalar('Valid/alpha', PL.model.height_alpha.item(), batch_idx)
             if mean_IoU > best_iou:
                 best_iou = mean_IoU
                 logger.cprint('*******************Model Saved*******************')
