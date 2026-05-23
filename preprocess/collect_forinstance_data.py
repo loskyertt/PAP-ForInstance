@@ -5,12 +5,13 @@ Mirrors the role of collect_s3dis_data.py / collect_scannet_data.py.
 Only responsible for: read LAS → filter → remap labels → normalize → save .npy
 Block-cutting is handled separately by forinstance2blocks.py.
 
-Output format per file: float32 array of shape [N, 7]
+Output format per file: float32 array of shape [N, 8]
     col 0-2 : x, y, z              (shifted to plot-local origin, unit: meters)
     col 3   : intensity             (min-max normalized to [0, 1])
     col 4   : return_number         (divided by 5.0, clipped to [0, 1])
     col 5   : number_of_returns     (divided by 5.0, clipped to [0, 1])
-    col 6   : label                 (int stored as float32; see LABEL_MAP below)
+    col 6   : scan_angle_rank       ((deg + 90) / 180, clipped to [0, 1])
+    col 7   : label                 (int stored as float32; see LABEL_MAP below)
 
 Label mapping (remapped from raw 'classification' field):
     raw 2  →  0  terrain
@@ -87,18 +88,19 @@ def remap_labels(labels: np.ndarray) -> np.ndarray:
 
 def process_las_file(las_path: str, out_path: str) -> int:
     """
-    Read one .las file and save a cleaned [N, 5] .npy array.
+    Read one .las file and save a cleaned [N, 8] .npy array.
 
     Steps
     -----
-    1. Load x, y, z, intensity, classification, return_number, number_of_returns
-       from the .las file.
+    1. Load x, y, z, intensity, classification, return_number, number_of_returns,
+       scan_angle_rank from the .las file.
     2. Drop ignore labels (0 = unclassified, 3 = out-of-boundary points).
     3. Remap remaining labels to 0-4.
     4. Shift xyz so the per-plot minimum is at the origin.
     5. Normalize intensity with per-plot min-max scaling.
     6. Normalize return_number and number_of_returns by dividing by 5.0.
-    7. Stack into [N, 7] and save.
+    7. Normalize scan_angle_rank: (deg + 90) / 180, clip to [0, 1].
+    8. Stack into [N, 8] and save.
 
     Returns the number of points saved (0 if the file is skipped).
     """
@@ -111,6 +113,7 @@ def process_las_file(las_path: str, out_path: str) -> int:
     intensity = np.array(las.intensity, dtype=np.float32)
     return_number = np.array(las.return_number, dtype=np.float32)
     number_of_returns = np.array(las.number_of_returns, dtype=np.float32)
+    scan_angle_rank = np.array(las.scan_angle_rank, dtype=np.float32)
     labels_raw = np.array(las.classification, dtype=np.int64)
 
     # --- step 1: filter ignore labels ---
@@ -119,6 +122,7 @@ def process_las_file(las_path: str, out_path: str) -> int:
     intensity = intensity[valid]
     return_number = return_number[valid]
     number_of_returns = number_of_returns[valid]
+    scan_angle_rank = scan_angle_rank[valid]
     labels_raw = labels_raw[valid]
 
     # --- step 2: remap labels, drop any residual unmapped points ---
@@ -128,6 +132,7 @@ def process_las_file(las_path: str, out_path: str) -> int:
     intensity = intensity[valid2]
     return_number = return_number[valid2]
     number_of_returns = number_of_returns[valid2]
+    scan_angle_rank = scan_angle_rank[valid2]
     labels = labels[valid2]
 
     if len(xyz) == 0:
@@ -147,7 +152,12 @@ def process_las_file(las_path: str, out_path: str) -> int:
     return_number = np.clip(return_number / 5.0, 0.0, 1.0)
     number_of_returns = np.clip(number_of_returns / 5.0, 0.0, 1.0)
 
-    # --- step 6: assemble [N, 7] ---
+    # --- step 6: normalize scan_angle_rank ---
+    # scan_angle_rank is in degrees, range [-90, 90] in the LAS spec.
+    # Map to [0, 1] via (deg + 90) / 180 and clip.
+    scan_angle_rank = np.clip((scan_angle_rank + 90.0) / 180.0, 0.0, 1.0)
+
+    # --- step 7: assemble [N, 8] ---
     # Label is stored as float32 to keep the array homogeneous;
     # cast back to int64 when loading in the dataloader.
     data = np.column_stack(
@@ -156,6 +166,7 @@ def process_las_file(las_path: str, out_path: str) -> int:
             intensity.reshape(-1, 1),  # (N, 1)
             return_number.reshape(-1, 1),  # (N, 1)
             number_of_returns.reshape(-1, 1),  # (N, 1)
+            scan_angle_rank.reshape(-1, 1),  # (N, 1)
             labels.reshape(-1, 1).astype(np.float32),  # (N, 1)
         ]
     ).astype(np.float32)

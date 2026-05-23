@@ -12,16 +12,17 @@ Key differences from room2blocks.py
 
 Input  (output of collect_forinstance_data.py):
     datasets/FORInstance/scenes_dev/data/*.npy
-    Each file: float32 [N, 7]
+    Each file: float32 [N, 8]
         col 0-2 : x, y, z              (plot-local coordinates, meters)
         col 3   : intensity             (normalized)
         col 4   : return_number         (normalized)
         col 5   : number_of_returns     (normalized)
-        col 6   : label                 (0-4, stored as float32)
+        col 6   : scan_angle_rank       (normalized)
+        col 7   : label                 (0-4, stored as float32)
 
 Output:
     datasets/FORInstance/blocks_dev_bs<size>_s<stride>/data/*.npy
-    Each file: float32 [M, 7]   (M varies; dataloader samples to fixed pc_npts)
+    Each file: float32 [M, 8]   (M varies; dataloader samples to fixed pc_npts)
     Same column layout as input — no additional normalization here.
     Block-level XY centering is performed in the dataloader, not here,
     to keep this script consistent with room2blocks.py.
@@ -62,14 +63,14 @@ def plot2blocks(
     only the default parameters differ (larger block / stride for outdoor scenes).
 
     Args:
-        data      : float32 [N, 7] — x, y, z, intensity, return_number,
-                    number_of_returns, label
+        data      : float32 [N, 8] — x, y, z, intensity, return_number,
+                    number_of_returns, scan_angle_rank, label
         block_size: physical edge length of each block (meters)
         stride    : sliding step (meters); stride <= block_size gives overlap
         min_npts  : discard blocks with fewer points than this threshold
 
     Returns:
-        list of float32 arrays, each [M, 7]  (M varies per block)
+        list of float32 arrays, each [M, 8]  (M varies per block)
     """
     assert stride <= block_size, (
         f"stride ({stride}) must be <= block_size ({block_size})"
@@ -197,7 +198,7 @@ def main():
 
     for fp in file_paths:
         plot_name = os.path.basename(fp)[:-4]  # strip .npy
-        data = np.load(fp)  # [N, 7]
+        data = np.load(fp)  # [N, 8]
 
         blocks = plot2blocks(data, args.block_size, args.stride, args.min_npts)
 

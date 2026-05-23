@@ -11,4 +11,4 @@ python preprocess/forinstance2blocks.py \
   --stride 5.0 \
   --min_npts 1024 \
   --overwrite \
-  --tag _rn
+  --tag _rna

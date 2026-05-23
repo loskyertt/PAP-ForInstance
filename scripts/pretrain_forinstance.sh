@@ -2,11 +2,11 @@ GPU_ID=0
 
 DATASET='forinstance'
 SPLIT=0
-DATA_PATH='./datasets/FORInstance/blocks_dev_bs10.0_s5.0_rn'
-SAVE_PATH='./logs/log_forinstance_rn/'
+DATA_PATH='./datasets/FORInstance/blocks_dev_bs10.0_s5.0_rna'
+SAVE_PATH='./logs/log_forinstance_rna/'
 
 NUM_POINTS=2048
-PC_ATTRIBS='xyzIRNXYZ'
+PC_ATTRIBS='xyzIRNAXYZ'
 EDGECONV_WIDTHS='[[64,64], [64, 64], [64, 64]]'
 MLP_WIDTHS='[512, 256]'
 K=20

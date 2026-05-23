@@ -2,23 +2,23 @@ GPU_ID=0
 
 DATASET='forinstance'
 SPLIT=0
-DATA_PATH='./datasets/FORInstance/blocks_dev_bs10.0_s5.0_rn'
-SAVE_PATH='./logs/log_forinstance_PAP_rn/'
+DATA_PATH='./datasets/FORInstance/blocks_dev_bs10.0_s5.0_rna'
+SAVE_PATH='./logs/log_forinstance_PAP_rna/'
 
 NUM_POINTS=2048
-PC_ATTRIBS='xyzIRNXYZ'
+PC_ATTRIBS='xyzIRNAXYZ'
 EDGECONV_WIDTHS='[[64,64], [64, 64], [64, 64]]'
 MLP_WIDTHS='[512, 256]'
 K=20
 BASE_WIDTHS='[128, 64]'
 
-PRETRAIN_CHECKPOINT='./logs/log_forinstance_rn/log_pretrain_forinstance_S0'
+PRETRAIN_CHECKPOINT='./logs/log_forinstance_rna/log_pretrain_forinstance_S0'
 N_WAY=2
 K_SHOT=1
 N_QUESIES=1
 N_TEST_EPISODES=100
 
-NUM_ITERS=40000
+NUM_ITERS=25000
 EVAL_INTERVAL=2000
 LR=0.001
 DECAY_STEP=5000

@@ -2,17 +2,17 @@ GPU_ID=0
 
 DATASET='forinstance'
 SPLIT=0
-DATA_PATH='./datasets/FORInstance/blocks_dev_bs10.0_s5.0_rn'
+DATA_PATH='./datasets/FORInstance/blocks_dev_bs10.0_s5.0_rna'
 
 NUM_POINTS=2048
-PC_ATTRIBS='xyzIRNXYZ'
+PC_ATTRIBS='xyzIRNAXYZ'
 EDGECONV_WIDTHS='[[64,64], [64, 64], [64, 64]]'
 MLP_WIDTHS='[512, 256]'
 K=20
 BASE_WIDTHS='[128, 64]'
 
-MODEL_CHECKPOINT='./logs/log_forinstance_PAP_rn/log_proto_forinstance_S0_N2_K1_Att1'
-PRETRAIN_CHECKPOINT='./logs/log_forinstance_rn/log_pretrain_forinstance_S0'
+MODEL_CHECKPOINT='./logs/log_forinstance_PAP_rna/log_proto_forinstance_S0_N2_K1_Att1'
+PRETRAIN_CHECKPOINT='./logs/log_forinstance_rna/log_pretrain_forinstance_S0'
 N_WAY=2
 K_SHOT=1
 N_QUESIES=1

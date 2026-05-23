@@ -44,7 +44,8 @@ def sample_K_pointclouds(
 
     Args:
         label_col : column index of the label field in the .npy block files.
-                    S3DIS / ScanNet → 6,  FOR-Instance 7-col → 6,  FOR-Instance 5-col → 4.
+                    S3DIS / ScanNet → 6,  FOR-Instance 8-col → 7,  FOR-Instance 7-col → 6,
+                    FOR-Instance 5-col → 4.
     """
     ptclouds = []
     labels = []
@@ -87,15 +88,17 @@ def sample_pointcloud(
     Args:
         label_col : column index of the label field.
                     S3DIS / ScanNet → 6 ([x,y,z,r,g,b,label]).
+                    FOR-Instance 8-col → 7 ([x,y,z,I,R,N,A,label]).
                     FOR-Instance 7-col → 6 ([x,y,z,I,R,N,label]).
                     FOR-Instance 5-col → 4 ([x,y,z,I,label]).
         pc_attribs: string of attribute codes.
-                    Supported codes: 'xyz', 'rgb', 'XYZ', 'I', 'R', 'N'
+                    Supported codes: 'xyz', 'rgb', 'XYZ', 'I', 'R', 'N', 'A'
                     'xyz' → raw 3-D coordinates (cols 0-2)
                     'rgb' → colour  (cols 3-5, scaled to [0,1])
                     'I'   → intensity (col 3, already in [0,1])
                     'R'   → return_number (col 4, FOR-Instance only)
                     'N'   → number_of_returns (col 5, FOR-Instance only)
+                    'A'   → scan_angle_rank (col 6, FOR-Instance only)
                     'XYZ' → block-normalised coordinates (computed)
     """
     sampled_classes = list(sampled_classes)
@@ -115,6 +118,14 @@ def sample_pointcloud(
             f"number_of_returns (N), but {scan_name}.npy has only "
             f"{data.shape[1]} columns. Re-run preprocessing with the 7-col "
             "pipeline to include echo attributes."
+        )
+
+    if "A" in pc_attribs and data.shape[1] < 8:
+        raise ValueError(
+            f"pc_attribs='{pc_attribs}' requests scan_angle_rank (A), "
+            f"but {scan_name}.npy has only {data.shape[1]} columns. "
+            "Re-run preprocessing with the 8-col pipeline to include "
+            "scan_angle_rank."
         )
 
     # ------------------------------------------------------------------ #
@@ -157,6 +168,7 @@ def sample_pointcloud(
     intensity = data[:, 3:4]  # FOR-Instance (col 3)
     return_number = data[:, 4:5]  # FOR-Instance 7-col (col 4)
     number_of_returns = data[:, 5:6]  # FOR-Instance 7-col (col 5)
+    scan_angle_rank = data[:, 6:7]  # FOR-Instance 8-col (col 6)
     labels = data[:, label_col].astype(np.int64)  # use label_col
 
     # ------------------------------------------------------------------ #
@@ -188,6 +200,8 @@ def sample_pointcloud(
         ptcloud.append(return_number)  # return_number, normalised to [0, 1]
     if "N" in pc_attribs:
         ptcloud.append(number_of_returns)  # number_of_returns, normalised to [0, 1]
+    if "A" in pc_attribs:
+        ptcloud.append(scan_angle_rank)  # scan_angle_rank, normalised to [0, 1]
     if "XYZ" in pc_attribs:
         ptcloud.append(XYZ)
     ptcloud = np.concatenate(ptcloud, axis=1)
