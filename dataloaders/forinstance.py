@@ -5,13 +5,15 @@ loader.py can treat it as a drop-in replacement.
 
 Data format expected (output of collect_forinstance_data.py +
 forinstance2blocks.py):
-    float32 [N, 5]
-        col 0-2 : x, y, z       (block-local coordinates, meters)
-        col 3   : intensity      (min-max normalized to [0, 1])
-        col 4   : label          (0-4, stored as float32; cast to int64 on load)
+    float32 [N, 7]
+        col 0-2 : x, y, z              (block-local coordinates, meters)
+        col 3   : intensity             (min-max normalized to [0, 1])
+        col 4   : return_number         (normalized to [0, 1])
+        col 5   : number_of_returns     (normalized to [0, 1])
+        col 6   : label                 (0-4, stored as float32; cast to int64 on load)
 
-This loader also accepts the earlier 8-column FOR-Instance blocks already
-present in some workspaces, where the semantic label is stored in col 7.
+This loader also accepts the legacy 5-column format (label in col 4) and
+the earlier 8-column FOR-Instance blocks (label in col 7).
 
 Label mapping (remapped from raw 'classification' field):
     0 → terrain
@@ -39,8 +41,7 @@ import numpy as np
 class FORInstanceDataset(object):
     # Column index of the label field in the preprocessed .npy blocks.
     # S3DIS / ScanNet use col 6 ([x,y,z,r,g,b,label]).
-    # FOR-Instance can use col 4 in the current 5-column preprocessing output,
-    # or col 7 in earlier 8-column blocks.
+    # FOR-Instance: auto-detected — col 6 for 7-col, col 4 for 5-col, col 7 for 8-col legacy.
     LABEL_COL = None
     CLASS_NAMES = ["terrain", "low_vegetation", "stem", "live_branches", "woody_branches"]
 
@@ -180,10 +181,12 @@ class FORInstanceDataset(object):
     def _detect_label_col(self) -> int:
         """Detect the semantic-label column for FOR-Instance block files.
 
-        The current preprocessing pipeline writes [x,y,z,intensity,label].
-        Some existing generated data in this project has 8 columns and stores
-        semantic labels in the last column. Prefer the 8-column layout when it
-        is present so old generated blocks remain usable.
+        Current preprocessing writes 7 columns:
+            [x, y, z, intensity, return_number, number_of_returns, label]
+        with the label (0-4) in the last column (index 6).
+
+        Legacy formats still supported: 5-col [x,y,z,intensity,label] and
+        an older 8-col format with label in col 7.
         """
         block_files = sorted(glob.glob(os.path.join(self.data_path, "data", "*.npy")))
         if not block_files:
@@ -196,18 +199,24 @@ class FORInstanceDataset(object):
                 f"for {block_files[0]}"
             )
 
-        if sample.shape[1] >= 8:
-            labels = sample[:, 7].astype(np.int64)
-            if np.all((labels >= 0) & (labels < self.classes)):
-                return 7
+        ncols = sample.shape[1]
 
-        if sample.shape[1] >= 5:
-            labels = sample[:, 4].astype(np.int64)
-            if np.all((labels >= 0) & (labels < self.classes)):
-                return 4
+        # Check candidate label columns from rightmost to leftmost.
+        # For each, verify the values are valid class indices (0-4).
+        candidates = [
+            (7, "8-col legacy"),  # legacy 8-column format
+            (6, "7-col echo"),    # current format with return_number + number_of_returns
+            (4, "5-col"),         # baseline format without echo attributes
+        ]
+        for candidate_col, desc in candidates:
+            if ncols > candidate_col:
+                labels = sample[:, candidate_col].astype(np.int64)
+                if np.all((labels >= 0) & (labels < self.classes)):
+                    return candidate_col
 
         raise ValueError(
-            "Could not detect FOR-Instance label column. Expected either "
-            "[x,y,z,intensity,label] or an 8-column block with labels in col 7; "
-            f"got shape {sample.shape} for {block_files[0]}"
+            "Could not detect FOR-Instance label column. "
+            f"Got shape {sample.shape} for {block_files[0]}. "
+            "Expected one of: 7-col [x,y,z,I,R,N,label], "
+            "5-col [x,y,z,I,label], or 8-col legacy."
         )

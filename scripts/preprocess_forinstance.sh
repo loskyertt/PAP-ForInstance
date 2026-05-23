@@ -10,4 +10,5 @@ python preprocess/forinstance2blocks.py \
   --block_size 10.0 \
   --stride 5.0 \
   --min_npts 1024 \
-  --overwrite
+  --overwrite \
+  --tag _rn

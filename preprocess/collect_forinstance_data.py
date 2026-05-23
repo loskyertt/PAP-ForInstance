@@ -5,10 +5,12 @@ Mirrors the role of collect_s3dis_data.py / collect_scannet_data.py.
 Only responsible for: read LAS → filter → remap labels → normalize → save .npy
 Block-cutting is handled separately by forinstance2blocks.py.
 
-Output format per file: float32 array of shape [N, 5]
-    col 0-2 : x, y, z        (shifted to plot-local origin, unit: meters)
-    col 3   : intensity       (min-max normalized to [0, 1])
-    col 4   : label           (int stored as float32; see LABEL_MAP below)
+Output format per file: float32 array of shape [N, 7]
+    col 0-2 : x, y, z              (shifted to plot-local origin, unit: meters)
+    col 3   : intensity             (min-max normalized to [0, 1])
+    col 4   : return_number         (divided by 5.0, clipped to [0, 1])
+    col 5   : number_of_returns     (divided by 5.0, clipped to [0, 1])
+    col 6   : label                 (int stored as float32; see LABEL_MAP below)
 
 Label mapping (remapped from raw 'classification' field):
     raw 2  →  0  terrain
@@ -89,12 +91,14 @@ def process_las_file(las_path: str, out_path: str) -> int:
 
     Steps
     -----
-    1. Load x, y, z, intensity, classification from the .las file.
+    1. Load x, y, z, intensity, classification, return_number, number_of_returns
+       from the .las file.
     2. Drop ignore labels (0 = unclassified, 3 = out-of-boundary points).
     3. Remap remaining labels to 0-4.
     4. Shift xyz so the per-plot minimum is at the origin.
     5. Normalize intensity with per-plot min-max scaling.
-    6. Stack into [N, 5] and save.
+    6. Normalize return_number and number_of_returns by dividing by 5.0.
+    7. Stack into [N, 7] and save.
 
     Returns the number of points saved (0 if the file is skipped).
     """
@@ -105,12 +109,16 @@ def process_las_file(las_path: str, out_path: str) -> int:
         np.float64
     )  # keep float64 for precision
     intensity = np.array(las.intensity, dtype=np.float32)
+    return_number = np.array(las.return_number, dtype=np.float32)
+    number_of_returns = np.array(las.number_of_returns, dtype=np.float32)
     labels_raw = np.array(las.classification, dtype=np.int64)
 
     # --- step 1: filter ignore labels ---
     valid = ~np.isin(labels_raw, list(IGNORE_LABELS))
     xyz = xyz[valid]
     intensity = intensity[valid]
+    return_number = return_number[valid]
+    number_of_returns = number_of_returns[valid]
     labels_raw = labels_raw[valid]
 
     # --- step 2: remap labels, drop any residual unmapped points ---
@@ -118,6 +126,8 @@ def process_las_file(las_path: str, out_path: str) -> int:
     valid2 = labels >= 0
     xyz = xyz[valid2]
     intensity = intensity[valid2]
+    return_number = return_number[valid2]
+    number_of_returns = number_of_returns[valid2]
     labels = labels[valid2]
 
     if len(xyz) == 0:
@@ -132,13 +142,20 @@ def process_las_file(las_path: str, out_path: str) -> int:
     i_min, i_max = float(intensity.min()), float(intensity.max())
     intensity = (intensity - i_min) / (i_max - i_min + 1e-8)
 
-    # --- step 5: assemble [N, 5] ---
+    # --- step 5: normalize return_number and number_of_returns ---
+    # Divide by 5.0 (typical max pulse returns in UAV LiDAR) and clip to [0, 1]
+    return_number = np.clip(return_number / 5.0, 0.0, 1.0)
+    number_of_returns = np.clip(number_of_returns / 5.0, 0.0, 1.0)
+
+    # --- step 6: assemble [N, 7] ---
     # Label is stored as float32 to keep the array homogeneous;
     # cast back to int64 when loading in the dataloader.
     data = np.column_stack(
         [
             xyz,  # (N, 3)
             intensity.reshape(-1, 1),  # (N, 1)
+            return_number.reshape(-1, 1),  # (N, 1)
+            number_of_returns.reshape(-1, 1),  # (N, 1)
             labels.reshape(-1, 1).astype(np.float32),  # (N, 1)
         ]
     ).astype(np.float32)
@@ -227,7 +244,7 @@ def main():
 
         # Accumulate per-class statistics from the saved file
         saved = np.load(out_path)
-        lbls = saved[:, 4].astype(np.int64)
+        lbls = saved[:, -1].astype(np.int64)
         for c in range(NUM_CLASSES):
             class_counter[c] += int(np.sum(lbls == c))
         total_pts += n

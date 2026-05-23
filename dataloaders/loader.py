@@ -44,7 +44,7 @@ def sample_K_pointclouds(
 
     Args:
         label_col : column index of the label field in the .npy block files.
-                    S3DIS / ScanNet → 6,  FOR-Instance → 4.
+                    S3DIS / ScanNet → 6,  FOR-Instance 7-col → 6,  FOR-Instance 5-col → 4.
     """
     ptclouds = []
     labels = []
@@ -87,12 +87,15 @@ def sample_pointcloud(
     Args:
         label_col : column index of the label field.
                     S3DIS / ScanNet → 6 ([x,y,z,r,g,b,label]).
-                    FOR-Instance    → 4 ([x,y,z,intensity,label]).
+                    FOR-Instance 7-col → 6 ([x,y,z,I,R,N,label]).
+                    FOR-Instance 5-col → 4 ([x,y,z,I,label]).
         pc_attribs: string of attribute codes.
-                    Supported codes: 'xyz', 'rgb', 'XYZ', 'I'
+                    Supported codes: 'xyz', 'rgb', 'XYZ', 'I', 'R', 'N'
                     'xyz' → raw 3-D coordinates (cols 0-2)
                     'rgb' → colour  (cols 3-5, scaled to [0,1])
                     'I'   → intensity (col 3, already in [0,1])
+                    'R'   → return_number (col 4, FOR-Instance only)
+                    'N'   → number_of_returns (col 5, FOR-Instance only)
                     'XYZ' → block-normalised coordinates (computed)
     """
     sampled_classes = list(sampled_classes)
@@ -104,6 +107,14 @@ def sample_pointcloud(
             f"pc_attribs='{pc_attribs}' requests rgb, but {scan_name}.npy has "
             f"only {data.shape[1]} columns. FOR-Instance blocks use "
             "[x,y,z,intensity,label]; pass --pc_attribs xyzIXYZ."
+        )
+
+    if ("R" in pc_attribs or "N" in pc_attribs) and data.shape[1] < 7:
+        raise ValueError(
+            f"pc_attribs='{pc_attribs}' requests return_number (R) or "
+            f"number_of_returns (N), but {scan_name}.npy has only "
+            f"{data.shape[1]} columns. Re-run preprocessing with the 7-col "
+            "pipeline to include echo attributes."
         )
 
     # ------------------------------------------------------------------ #
@@ -144,6 +155,8 @@ def sample_pointcloud(
     xyz = data[:, 0:3]  # always available
     rgb = data[:, 3:6]  # S3DIS / ScanNet
     intensity = data[:, 3:4]  # FOR-Instance (col 3)
+    return_number = data[:, 4:5]  # FOR-Instance 7-col (col 4)
+    number_of_returns = data[:, 5:6]  # FOR-Instance 7-col (col 5)
     labels = data[:, label_col].astype(np.int64)  # use label_col
 
     # ------------------------------------------------------------------ #
@@ -171,6 +184,10 @@ def sample_pointcloud(
         ptcloud.append(rgb / 255.0)
     if "I" in pc_attribs:
         ptcloud.append(intensity)  # already normalised to [0, 1]
+    if "R" in pc_attribs:
+        ptcloud.append(return_number)  # return_number, normalised to [0, 1]
+    if "N" in pc_attribs:
+        ptcloud.append(number_of_returns)  # number_of_returns, normalised to [0, 1]
     if "XYZ" in pc_attribs:
         ptcloud.append(XYZ)
     ptcloud = np.concatenate(ptcloud, axis=1)
