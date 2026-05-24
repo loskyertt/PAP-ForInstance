@@ -64,6 +64,21 @@ def evaluate_metric(logger, pred_labels_list, gt_labels_list, label2class_list, 
 
     mean_IoU = np.array(iou_list[1:]).mean()
 
+    # --- Overall Accuracy ---
+    total_correct = sum(true_positive_classes)
+    total_points = sum(gt_classes)
+    oa = total_correct / float(total_points)
+    logger.cprint('----- Overall Accuracy: %f -----' % oa)
+
+    # --- Per-class Accuracy and Mean Accuracy ---
+    acc_list = []
+    for c in range(NUM_CLASS):
+        acc = true_positive_classes[c] / float(gt_classes[c])
+        logger.cprint('----- [class %d]  Accuracy: %f -----' % (c, acc))
+        acc_list.append(acc)
+    macc = np.array(acc_list).mean()
+    logger.cprint('----- Mean Accuracy: %f -----' % macc)
+
     return mean_IoU
 
 
